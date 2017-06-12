@@ -373,18 +373,15 @@ sub main()
 
    my %os2info = @{ LoadRepoCfg() };
 
-   if ( $CFG{CREATE_DISTRO} )
+   foreach my $os_code ( sort keys %os2info )
    {
-      foreach my $os_code ( sort keys %os2info )
-      {
-         my $osinfo = $os2info{$os_code};
+      my $osinfo = $os2info{$os_code};
 
-         init_deb_repo( $os_code, $osinfo )
-           if ( $osinfo->{class} =~ m/ubuntu/ );
+      init_deb_repo( $os_code, $osinfo )
+        if ( $osinfo->{class} =~ m/ubuntu/ );
 
-         init_rpm_repo( $os_code, $osinfo )
-           if ( $osinfo->{class} =~ m/rhel/ );
-      }
+      init_rpm_repo( $os_code, $osinfo )
+        if ( $osinfo->{class} =~ m/rhel/ );
    }
 }
 
@@ -399,10 +396,13 @@ sub init_deb_repo
    my $limit         = $osinfo->{limit};
    my $sign_key      = $osinfo->{sign_key};
 
-   print "APT repository - OS_CODE: $os_code, REPO_NAME: $CFG{REPO_NAME}, DISTRO: $dist_codename - ";
+   print "Checking Key $sign_key\n";
+   if ( system("gpg", "--list-keys", $sign_key) != 0 )
+   {
+      exit 1;
+   }
 
-   make_path("$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf") or die "mkdir failed: $!"
-     if ( !-d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf" );
+   print "APT repository - OS_CODE: $os_code, REPO_NAME: $CFG{REPO_NAME}, DISTRO: $dist_codename - ";
 
    if (
       0
@@ -410,6 +410,15 @@ sub init_deb_repo
       || system( "grep", "-q", "-w", "-e", $dist_codename, "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions" ) != 0
      )
    {
+      if ( !$CFG{CREATE_DISTRO} )
+      {
+         print "MISSING\n";
+         exit 1;
+      }
+
+      make_path("$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf") or die "mkdir failed: $!"
+        if ( !-d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf" );
+
       if ( !-f "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/options" )
       {
          open( FD, ">", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/options" );
@@ -448,6 +457,15 @@ sub init_rpm_repo
    my $osinfo  = shift;
 
    my $dist_codename = $osinfo->{dist_codename};
+   my $os_name       = $osinfo->{os_name};
+   my $limit         = $osinfo->{limit};
+   my $sign_key      = $osinfo->{sign_key};
+
+   print "Checking Key $sign_key\n";
+   if ( system("gpg", "--list-keys", $sign_key) != 0 )
+   {
+      exit 1;
+   }
 
    print "RPM repository - OS_CODE: $os_code, REPO_NAME: $CFG{REPO_NAME}, DISTRO: $dist_codename - ";
 
@@ -457,6 +475,12 @@ sub init_rpm_repo
       || !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/x86_64"
      )
    {
+      if ( !$CFG{CREATE_DISTRO} )
+      {
+         print "MISSING\n";
+         exit 1;
+      }
+
       make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/SRPMS") or die "mkdir failed: $!"
         if ( !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/SRPMS" );
       make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/x86_64") or die "mkdir failed: $!"
