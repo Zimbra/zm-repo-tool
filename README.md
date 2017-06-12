@@ -1,14 +1,12 @@
 # zm-repo-tool
 
-Prerequisites:
-   # TBD
-   sudo apt install dpkg-dev debhelper
+# Prerequisites:
+   TBD
 
-Example:
-   # TBD
+# Example:
    /path/../zm-repo-tool/repo.pl \
       ... \
       ...
 
-Test:
-   # TBD
+# Test:
+   TBD
