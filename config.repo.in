@@ -1,7 +1,7 @@
 @ENTRIES = (
-   u12 => { dist_codename => "precise", class => "ubuntu", os_name => "UBUNTU12", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
-   u14 => { dist_codename => "trusty",  class => "ubuntu", os_name => "UBUNTU14", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
-   u16 => { dist_codename => "xenial",  class => "ubuntu", os_name => "UBUNTU16", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
-   r6  => { dist_codename => "rhel6",   class => "rhel",   os_name => "RHEL6",    limit => 5, sign_key => "DEF", key_pass => "DEP_PASS", },
-   r7  => { dist_codename => "rhel7",   class => "rhel",   os_name => "RHEL7",    limit => 5, sign_key => "DEF", key_pass => "DEP_PASS", },
+   { os_name => "UBUNTU12", distro => "precise", type => "APT", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
+   { os_name => "UBUNTU14", distro => "trusty",  type => "APT", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
+   { os_name => "UBUNTU16", distro => "xenial",  type => "APT", limit => 5, sign_key => "ABC", key_pass => "ABC_PASS", },
+   { os_name => "RHEL6",    distro => "rhel6",   type => "YUM", limit => 5, sign_key => "DEF", key_pass => "DEP_PASS", },
+   { os_name => "RHEL7",    distro => "rhel7",   type => "YUM", limit => 5, sign_key => "DEF", key_pass => "DEP_PASS", },
 );

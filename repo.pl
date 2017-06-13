@@ -130,6 +130,11 @@ sub LoadConfiguration($)
 }
 
 
+sub Line()
+{
+   return "=========================================================================================================\n";
+}
+
 sub Die($;$)
 {
    my $msg  = shift;
@@ -138,12 +143,12 @@ sub Die($;$)
 
    print "\n";
    print "\n";
-   print "=========================================================================================================\n";
+   print Line();
    print color('red') . "FAILURE MSG" . color('reset') . " : $msg\n";
    print color('red') . "SYSTEM ERR " . color('reset') . " : $err\n"  if ($err);
    print color('red') . "EXTRA INFO " . color('reset') . " : $info\n" if ($info);
    print "\n";
-   print "=========================================================================================================\n";
+   print Line();
    print color('red');
    print "--Stack Trace--\n";
    my $i = 1;
@@ -154,7 +159,7 @@ sub Die($;$)
    }
    print color('reset');
    print "\n";
-   print "=========================================================================================================\n";
+   print Line();
 
    die "END";
 }
@@ -248,9 +253,9 @@ sub ProcessArgs
       }
    }
 
-   print "=========================================================================================================\n";
+   print Line();
    LoadConfiguration($_) foreach (@$cmd_args);
-   print "=========================================================================================================\n";
+   print Line();
 }
 
 sub EvalFile($;$)
@@ -274,6 +279,7 @@ sub EvalFile($;$)
 ###########################################################################################################################
 
 use File::Path qw/make_path/;
+use Expect;
 
 sub LoadRepoCfg()
 {
@@ -288,6 +294,8 @@ sub LoadRepoCfg()
 sub main()
 {
    my %cmd_hash;
+
+   my @repo_conf = @{ LoadRepoCfg() };
 
    &ProcessArgs(
       \%cmd_hash,
@@ -333,35 +341,29 @@ sub main()
             validate_sub => undef,
             default_sub  => sub { return 1; },
          },
-
-         #      {
-         #         name         => "CREATE_DISTRO_NAME",
-         #         type         => "=s",
-         #         hash_src     => \%cmd_hash,
-         #         validate_sub => undef,
-         #         default_sub  => sub { return undef; },
-         #      },
-         #      {
-         #         name         => "SCAN_OS",
-         #         type         => "=s",
-         #         hash_src     => \%cmd_hash,
-         #         validate_sub => undef,
-         #         default_sub  => sub { return "all"; },
-         #      },
-         #      {
-         #         name         => "SCAN_OS_CLASS",
-         #         type         => "=s",
-         #         hash_src     => \%cmd_hash,
-         #         validate_sub => undef,
-         #         default_sub  => sub { return "all"; },
-         #      },
-         #      {
-         #         name         => "SCAN_PKG_NAME",
-         #         type         => "=s",
-         #         hash_src     => \%cmd_hash,
-         #         validate_sub => undef,
-         #         default_sub  => sub { return Die("@_ not unspecfied"); },
-         #      },
+         {
+            name         => "PACKAGE",
+            type         => "=s",
+            hash_src     => \%cmd_hash,
+            validate_sub => undef,
+            default_sub  => sub {
+               my $o = shift;
+               Die("$o not unspecfied");
+            },
+         },
+         {
+            name         => "OS",
+            type         => "=s",
+            hash_src     => \%cmd_hash,
+            validate_sub => sub {
+               my $v = shift;
+               return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
+            },
+            default_sub => sub {
+               my $o = shift;
+               Die("$o not unspecfied");
+            },
+         },
       ]
    );
 
@@ -371,52 +373,49 @@ sub main()
       read STDIN, $_, 1;
    }
 
-   my %os2info = @{ LoadRepoCfg() };
+   system("gpgconf --kill gpg-agent 2>/dev/null");
+   system("gpg-agent --daemon --pinentry-program /usr/bin/pinentry-tty 2>/dev/null");
 
-   foreach my $os_code ( sort keys %os2info )
+   foreach my $repo ( grep { $CFG{OS} eq $_->{os_name} } @repo_conf )
    {
-      my $osinfo = $os2info{$os_code};
+      print "CHECKING KEY $repo->{sign_key}\n";
+      if ( !$repo->{sign_key} || system("gpg --list-keys $repo->{sign_key} >/dev/null") != 0 )
+      {
+         Die("Key does not exist or unusable");
+      }
 
-      init_deb_repo( $os_code, $osinfo )
-        if ( $osinfo->{class} =~ m/ubuntu/ );
+      handle_apt_repo($repo)
+        if ( $repo->{type} eq "APT" );
 
-      init_rpm_repo( $os_code, $osinfo )
-        if ( $osinfo->{class} =~ m/rhel/ );
+      handle_yum_repo($repo)
+        if ( $repo->{type} eq "YUM" );
    }
 }
 
-
-sub init_deb_repo
-{
-   my $os_code = shift;
-   my $osinfo  = shift;
-
-   my $dist_codename = $osinfo->{dist_codename};
-   my $os_name       = $osinfo->{os_name};
-   my $limit         = $osinfo->{limit};
-   my $sign_key      = $osinfo->{sign_key};
-
-   print "Checking Key $sign_key\n";
-   if ( system("gpg", "--list-keys", $sign_key) != 0 )
-   {
-      exit 1;
+END {
+   eval {
+      local $?;
+      system("gpgconf --kill gpg-agent 2>/dev/null");
+      print Line();
    }
+}
 
-   print "APT repository - OS_CODE: $os_code, REPO_NAME: $CFG{REPO_NAME}, DISTRO: $dist_codename - ";
+sub handle_apt_repo
+{
+   my $repo = shift;
 
    if (
       0
       || !-f "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions"
-      || system( "grep", "-q", "-w", "-e", $dist_codename, "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions" ) != 0
+      || system( "grep", "-q", "-w", "-e", $repo->{distro}, "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions" ) != 0
      )
    {
       if ( !$CFG{CREATE_DISTRO} )
       {
-         print "MISSING\n";
-         exit 1;
+         Die("REPO MISSING");
       }
 
-      make_path("$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf") or die "mkdir failed: $!"
+      make_path("$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf") or Die("mkdir failed")
         if ( !-d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf" );
 
       if ( !-f "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/options" )
@@ -432,66 +431,172 @@ sub init_deb_repo
         if ( -s "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions" != 0 );
 
       print FD <<EOM
-Origin: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $os_name
-Label: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $os_name
-Codename: $dist_codename
+Origin: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $repo->{os_name}
+Label: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $repo->{os_name}
+Codename: $repo->{distro}
 Components: zimbra
 Architectures: amd64 source
-SignWith: $sign_key
-Limit: $limit
+SignWith: $repo->{sign_key}
+Limit: $repo->{limit}
 EOM
         ;
 
-      print "INITIALIZED\n";
+      print "REPO INITIALIZED\n";
    }
-   else
+
+   print "ADDING RPM PKG: $CFG{PACKAGE}\n";
+
+   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.deb") )
    {
-      print "ALREADY EXISTS\n";
+      Die("PACKAGE IS MISSING");
    }
+
+   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.changes") )
+   {
+      Die("PACKAGE CAN'T BE SIGNED, *.changes IS MISSING");
+   }
+
+   &debsign( "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.changes", $repo->{sign_key}, $repo->{key_pass} );
+   &updateReprepro( $CFG{REPO_NAME}, "includedeb", $repo->{distro}, "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.deb", $repo->{key_pass} );
+   &updateReprepro( $CFG{REPO_NAME}, "includedsc", $repo->{distro}, "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.dsc", $repo->{key_pass} )
+     if ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.dsc") );
+
+   unlink glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*");
 }
 
 
-sub init_rpm_repo
+sub handle_yum_repo
 {
-   my $os_code = shift;
-   my $osinfo  = shift;
-
-   my $dist_codename = $osinfo->{dist_codename};
-   my $os_name       = $osinfo->{os_name};
-   my $limit         = $osinfo->{limit};
-   my $sign_key      = $osinfo->{sign_key};
-
-   print "Checking Key $sign_key\n";
-   if ( system("gpg", "--list-keys", $sign_key) != 0 )
-   {
-      exit 1;
-   }
-
-   print "RPM repository - OS_CODE: $os_code, REPO_NAME: $CFG{REPO_NAME}, DISTRO: $dist_codename - ";
+   my $repo = shift;
 
    if (
       0
-      || !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/SRPMS"
-      || !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/x86_64"
+      || !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS"
+      || !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64"
      )
    {
       if ( !$CFG{CREATE_DISTRO} )
       {
-         print "MISSING\n";
-         exit 1;
+         Die("REPO MISSING");
       }
 
-      make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/SRPMS") or die "mkdir failed: $!"
-        if ( !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/SRPMS" );
-      make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/x86_64") or die "mkdir failed: $!"
-        if ( !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$dist_codename/x86_64" );
+      make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS") or Die("mkdir failed")
+        if ( !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS" );
+      make_path("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64") or Die("mkdir failed")
+        if ( !-d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64" );
 
-      print "INITIALIZED\n";
+      print "REPO INITIALIZED\n";
    }
-   else
+
+   print "ADDING RPM PKG: $CFG{PACKAGE}\n";
+
+   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm") )
    {
-      print "ALREADY EXISTS\n";
+      Die("PACKAGE IS MISSING");
    }
+
+   &rpmSign( "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm", $repo->{sign_key}, $repo->{key_pass} );
+
+   foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.src.rpm") )
+   {
+      mv( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" ) or Die("Could not move $file");
+   }
+
+   foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm") )
+   {
+      mv( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $file");
+   }
+
+   chdir("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}");
+   qx(createrepo --update .);
+   qx(rm -f \$(repomanage --old --keep=$repo->{limit} .));
+   qx(createrepo --update .);
+   chdir($CWD);
+}
+
+sub debsign
+{
+   my $changes_file = shift;
+   my $key          = shift;
+   my $pass         = shift;
+
+   my $exp = Expect->spawn(
+      "debsign",
+      "--no-conf"
+      , "--re-sign",
+      "-k",
+      $key,
+      glob($changes_file)
+     )
+     or Die("Cannot spawn debsign");
+
+   my $success = 0;
+
+   $exp->expect(
+      1800,
+      [ qr/Enter passphrase/, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ],
+      [ qr/Successfully signed/, sub { $success = 1; exp_continue; } ],
+   );
+
+   $exp->soft_close();
+
+   Die("Error in debsign")
+     if ( !$success );
+}
+
+sub updateReprepro
+{
+   my ( $destdir, $updtype, $distro, $package, $pass ) = @_;
+
+   my $exp = Expect->spawn(
+      "reprepro",
+      "--noguessgpgtty",
+      "--ignore=unknownfield",
+      "-b",
+      "$CFG{REPO_DIR}/apt/$destdir",
+      "-C",
+      "zimbra",
+      $updtype,
+      $distro,
+      glob($package)
+   ) or Die("Cannot spawm reprepro");
+
+   my $success = 1;
+
+   $exp->expect(
+      1800,
+      [ qr/.*passphrase:/i, sub { my $fh = shift; print $fh "$pass\r"; exp_continue; } ],
+      [ qr/ERROR/i, sub { $success = 0; exp_continue; } ],
+   );
+
+   $exp->soft_close();
+
+   Die("reprepro failed")
+     if ( !$success );
+}
+
+sub rpmSign
+{
+   my $package = shift;
+   my $key     = shift;
+   my $pass    = shift;
+
+   my $exp =
+     Expect->spawn(
+      "rpmsign",
+      "--resign",
+      "--define=" . q(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --passphrase-fd 3 --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
+      "--key-id=$key",
+      glob($package)
+     )
+     or Die("Cannot spawn rpmsign");
+
+   $exp->expect(
+      1800,
+      [ qr/Enter pass phrase/, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ]
+   );
+
+   $exp->soft_close();
 }
 
 
