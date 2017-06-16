@@ -392,7 +392,8 @@ sub main()
    }
 }
 
-END {
+END
+{
    eval {
       local $?;
       system("gpgconf --kill gpg-agent 2>/dev/null");
@@ -444,7 +445,7 @@ EOM
       print "REPO INITIALIZED\n";
    }
 
-   print "ADDING RPM PKG: $CFG{PACKAGE}\n";
+   print "ADDING DEB PKG: $CFG{PACKAGE}\n";
 
    if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.deb") )
    {
@@ -499,12 +500,12 @@ sub handle_yum_repo
 
    foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.src.rpm") )
    {
-      mv( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" ) or Die("Could not move $file");
+      move( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" ) or Die("Could not move $file");
    }
 
    foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm") )
    {
-      mv( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $file");
+      move( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $file");
    }
 
    chdir("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}");
@@ -534,8 +535,8 @@ sub debsign
 
    $exp->expect(
       1800,
-      [ qr/Enter passphrase/, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ],
-      [ qr/Successfully signed/, sub { $success = 1; exp_continue; } ],
+      [ qr/.*pass\s*phrase:/i, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ],
+      [ qr/Successfully signed/i, sub { $success = 1; exp_continue; } ],
    );
 
    $exp->soft_close();
@@ -549,9 +550,7 @@ sub updateReprepro
    my ( $destdir, $updtype, $distro, $package, $pass ) = @_;
 
    my $exp = Expect->spawn(
-      "reprepro",
-      "--noguessgpgtty",
-      "--ignore=unknownfield",
+      "reprepro", #"--ignore=unknownfield",
       "-b",
       "$CFG{REPO_DIR}/apt/$destdir",
       "-C",
@@ -565,7 +564,7 @@ sub updateReprepro
 
    $exp->expect(
       1800,
-      [ qr/.*passphrase:/i, sub { my $fh = shift; print $fh "$pass\r"; exp_continue; } ],
+      [ qr/.*pass\s*phrase:/i, sub { my $fh = shift; print $fh "$pass\r"; exp_continue; } ],
       [ qr/ERROR/i, sub { $success = 0; exp_continue; } ],
    );
 
