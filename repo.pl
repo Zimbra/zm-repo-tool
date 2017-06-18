@@ -318,13 +318,6 @@ sub main()
             default_sub  => sub { return "/var/repositories"; },
          },
          {
-            name         => "SCAN_DIR",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub { return $CWD; },
-         },
-         {
             name         => "REPO_NAME",
             type         => "=s",
             hash_src     => \%cmd_hash,
@@ -345,10 +338,94 @@ sub main()
             name         => "PACKAGE",
             type         => "=s",
             hash_src     => \%cmd_hash,
+            validate_sub => sub {
+               my $v = shift;
+               my @f = glob($v);
+
+               return !( @f != 1 || ( $f[0] !~ m/[.]rpm$/ && $f[0] !~ m/[.]deb$/ ) );
+            },
+            default_sub => sub {
+               my $o = shift;
+               Die("$o not unspecfied (should expand to a single .deb or .rpm)");
+            },
+         },
+         {
+            name         => "_PACKAGE_DIR",
+            type         => "",
+            hash_src     => undef,
             validate_sub => undef,
             default_sub  => sub {
-               my $o = shift;
-               Die("$o not unspecfied");
+               my @f   = glob( $CFG{PACKAGE} );
+               my $dir = dirname( $f[0] );
+               return $dir;
+            },
+         },
+         {
+            name         => "_PACKAGE_FNAME",
+            type         => "",
+            hash_src     => undef,
+            validate_sub => undef,
+            default_sub  => sub {
+               my @f = glob( $CFG{PACKAGE} );
+               my $b = basename( $f[0] );
+               return $b;
+            },
+         },
+         {
+            name         => "_PACKAGE_NAME",
+            type         => "",
+            hash_src     => undef,
+            validate_sub => undef,
+            default_sub  => sub {
+               my $b = $CFG{_PACKAGE_FNAME};
+               $b =~ s/[-_]\d\d*.*//;
+               return $b;
+            },
+         },
+         {
+            name         => "_PACKAGE_OS",
+            type         => "",
+            hash_src     => undef,
+            validate_sub => undef,
+            default_sub  => sub {
+               return "UBUNTU16"
+                 if (
+                  $CFG{_PACKAGE_DIR}      =~ m/\/u16\//
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u16_[a-z0-9]*[.]deb/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]16[.]04_[a-z0-9]*[.]deb/
+                 );
+               return "UBUNTU14"
+                 if (
+                  $CFG{_PACKAGE_DIR}      =~ m/\/u14\//
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u14_[a-z0-9]*[.]deb/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]14[.]04_[a-z0-9]*[.]deb/
+                 );
+               return "UBUNTU12"
+                 if (
+                  $CFG{_PACKAGE_DIR}      =~ m/\/u12\//
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u12_[a-z0-9]*[.]deb/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]12[.]04_[a-z0-9]*[.]deb/
+                 );
+               return "RHEL7"
+                 if (
+                  $CFG{_PACKAGE_DIR}      =~ m/\/c7\//
+                  || $CFG{_PACKAGE_DIR}   =~ m/\/r7\//
+                  || $CFG{_PACKAGE_DIR}   =~ m/\/el7\//
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
+                 );
+               return "RHEL6"
+                 if (
+                  $CFG{_PACKAGE_DIR}      =~ m/\/c6\//
+                  || $CFG{_PACKAGE_DIR}   =~ m/\/r6\//
+                  || $CFG{_PACKAGE_DIR}   =~ m/\/el6\//
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c6[.][a-z_0-9]*[.]rpm/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r6[.][a-z_0-9]*[.]rpm/
+                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el6[.][a-z_0-9]*[.]rpm/
+                 );
+
+               return undef;
             },
          },
          {
@@ -360,8 +437,11 @@ sub main()
                return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
             },
             default_sub => sub {
+               return $CFG{_PACKAGE_OS}
+                 if ( $CFG{_PACKAGE_OS} );
+
                my $o = shift;
-               Die("$o not unspecfied");
+               Die("$o not specfied (could not auto detect)");
             },
          },
       ]
@@ -445,24 +525,27 @@ EOM
       print "REPO INITIALIZED\n";
    }
 
-   print "ADDING DEB PKG: $CFG{PACKAGE}\n";
+   print "ADDING DEB PKG: $CFG{_PACKAGE_NAME}\n";
 
-   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.deb") )
-   {
-      Die("PACKAGE IS MISSING");
-   }
+   s/$//                       for ( my $deb_file      = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
+   s/[.]deb$/.changes/         for ( my $changes_file  = $deb_file );
+   s/_[a-z0-9]*[.]deb$/.dsc/   for ( my $dsc_file      = $deb_file );
+   s/_[a-z0-9]*[.]deb$/.tar.*/ for ( my $tar_file_glob = $deb_file );
 
-   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.changes") )
-   {
-      Die("PACKAGE CAN'T BE SIGNED, *.changes IS MISSING");
-   }
+   Die("PACKAGE '$deb_file' IS MISSING")
+     if ( !-f $deb_file );
+   Die("PACKAGE '$changes_file' IS MISSING")
+     if ( !-f $changes_file );
 
-   &debsign( "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.changes", $repo->{sign_key}, $repo->{key_pass} );
-   &updateReprepro( $CFG{REPO_NAME}, "includedeb", $repo->{distro}, "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.deb", $repo->{key_pass} );
-   &updateReprepro( $CFG{REPO_NAME}, "includedsc", $repo->{distro}, "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.dsc", $repo->{key_pass} )
-     if ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.dsc") );
+   &debsign( $changes_file, $repo->{sign_key}, $repo->{key_pass} );
+   &updateReprepro( $CFG{REPO_NAME}, "includedeb", $repo->{distro}, $deb_file, $repo->{key_pass} );
+   &updateReprepro( $CFG{REPO_NAME}, "includedsc", $repo->{distro}, $dsc_file, $repo->{key_pass} )
+     if ( -f $dsc_file );
 
-   unlink glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*");
+   unlink($deb_file);
+   unlink($dsc_file)     if ( -f $dsc_file );
+   unlink($changes_file) if ( -f $changes_file );
+   unlink( glob($tar_file_glob) );
 }
 
 
@@ -489,24 +572,20 @@ sub handle_yum_repo
       print "REPO INITIALIZED\n";
    }
 
-   print "ADDING RPM PKG: $CFG{PACKAGE}\n";
+   print "ADDING RPM PKG: $CFG{_PACKAGE_NAME}\n";
 
-   if ( !glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm") )
-   {
-      Die("PACKAGE IS MISSING");
-   }
+   s/[.]src[.]rpm/.rpm/ for ( my $rpm_file  = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
+   s/[.]rpm/.src.rpm/   for ( my $srpm_file = $rpm_file );
 
-   &rpmSign( "$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm", $repo->{sign_key}, $repo->{key_pass} );
+   Die("PACKAGE '$rpm_file' IS MISSING")
+     if ( !-f $rpm_file );
 
-   foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.src.rpm") )
-   {
-      move( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" ) or Die("Could not move $file");
-   }
+   &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass} );
+   &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
 
-   foreach my $file ( glob("$CFG{SCAN_DIR}/$CFG{PACKAGE}*.rpm") )
-   {
-      move( "$file", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $file");
-   }
+   move( $rpm_file,  "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
+   move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" )  or Die("Could not move $srpm_file")
+     if ( -f $srpm_file );
 
    chdir("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}");
    qx(createrepo --update .);
@@ -527,7 +606,7 @@ sub debsign
       , "--re-sign",
       "-k",
       $key,
-      glob($changes_file)
+      $changes_file
      )
      or Die("Cannot spawn debsign");
 
@@ -550,14 +629,14 @@ sub updateReprepro
    my ( $destdir, $updtype, $distro, $package, $pass ) = @_;
 
    my $exp = Expect->spawn(
-      "reprepro", #"--ignore=unknownfield",
+      "reprepro",    #"--ignore=unknownfield",
       "-b",
       "$CFG{REPO_DIR}/apt/$destdir",
       "-C",
       "zimbra",
       $updtype,
       $distro,
-      glob($package)
+      $package
    ) or Die("Cannot spawm reprepro");
 
    my $success = 1;
@@ -586,7 +665,7 @@ sub rpmSign
       "--resign",
       "--define=" . q(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --passphrase-fd 3 --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
       "--key-id=$key",
-      glob($package)
+      $package
      )
      or Die("Cannot spawn rpmsign");
 

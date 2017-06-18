@@ -38,17 +38,15 @@
 # Example:
    /path/../zm-repo-tool/repo.pl \
       --repo-name D1 \
-      --os=UBUNTU12 \
-      --scan-dir ./Z/u16/D1/870 \
-      --package zmb1-abc-svc \
-      --create-distro
+      --create-distro \
+      --package ./Z/u16/D1/870/zmb1-abc-svc*.deb \
+      --os=UBUNTU16
 
    /path/../zm-repo-tool/repo.pl \
       --repo-name D1 \
-      --os=RHEL7 \
-      --scan-dir ./Z/r7/D1/870 \
-      --package zmb1-abc-svc \
-      --create-distro
+      --create-distro \
+      --package ./Z/r7/D1/870/zmb1-abc-svc*.rpm \
+      --os=RHEL7
 
 # Test:
    TBD
