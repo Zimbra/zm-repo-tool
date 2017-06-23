@@ -519,13 +519,12 @@ sub handle_apt_repo
         if ( -s "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/conf/distributions" != 0 );
 
       print FD <<EOM
-Origin: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $repo->{os_name}
-Label: Zimbra Collaboration Suite $CFG{REPO_NAME} Repository for $repo->{os_name}
+Origin: $repo->{desc}
+Label: $repo->{desc}
 Codename: $repo->{distro}
-Components: zimbra
+Components: $repo->{component}
 Architectures: amd64 source
 SignWith: $repo->{sign_key}
-Limit: $repo->{limit}
 EOM
         ;
       close(FD);
@@ -548,13 +547,13 @@ EOM
    print "\n";
    print "PACKAGE LISTINGS (BEFORE):\n";
    print "--------------------------\n";
-   &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+   &repreproCmd( $CFG{REPO_NAME}, $repo->{component}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
    print "--------------------------\n";
    print "\n";
 
    if ( $CFG{POP_BACK} )
    {
-      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", "zimbra", "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
       chomp( my @f = <FD> );
       close(FD);
 
@@ -566,12 +565,12 @@ EOM
          print "\n";
       }
 
-      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "remove", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{component}, $repo->{key_pass}, "remove", $repo->{distro}, $CFG{_PACKAGE_NAME} );
    }
    else
    {
       {
-         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", "zimbra", "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
          chomp( my @f = <FD> );
          close(FD);
 
@@ -588,8 +587,8 @@ EOM
       }
 
       &debsign( $changes_file, $repo->{sign_key}, $repo->{key_pass} );
-      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "includedeb", $repo->{distro}, $deb_file );
-      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "includedsc", $repo->{distro}, $dsc_file )
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{component}, $repo->{key_pass}, "includedeb", $repo->{distro}, $deb_file );
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{component}, $repo->{key_pass}, "includedsc", $repo->{distro}, $dsc_file )
         if ( -f $dsc_file );
 
       unlink($deb_file);
@@ -601,7 +600,7 @@ EOM
    print "\n";
    print "PACKAGE LISTINGS (AFTER):\n";
    print "--------------------------\n";
-   &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+   &repreproCmd( $CFG{REPO_NAME}, $repo->{component}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
    print "--------------------------\n";
    print "\n";
 }
@@ -737,14 +736,14 @@ sub debsign
 
 sub repreproCmd
 {
-   my ( $destdir, $pass, $cmd, $distro, $package ) = @_;
+   my ( $destdir, $component, $pass, $cmd, $distro, $package ) = @_;
 
    my $exp = Expect->spawn(
       "reprepro",    #"--ignore=unknownfield",
       "-b",
       "$CFG{REPO_DIR}/apt/$destdir",
       "-C",
-      "zimbra",
+      $component,
       $cmd,
       $distro,
       $package
