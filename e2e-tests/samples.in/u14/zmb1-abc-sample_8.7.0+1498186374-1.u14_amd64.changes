@@ -1,0 +1,22 @@
+Format: 1.8
+Date: Wed, 01 Mar 2017 01:43:10 +0530
+Source: zmb1-abc-sample
+Binary: zmb1-abc-sample
+Architecture: amd64
+Version: 8.7.0+1498186374-1.u14
+Distribution: stable
+Urgency: medium
+Maintainer: Zimbra Packaging Services <build@zimbra.com>
+Changed-By: Zimbra Builder (builder) <build@zimbra>
+Description: 
+ zmb1-abc-sample - its zmb-abc-sample 8.7.0+1498186374
+Changes: 
+ zmb1-abc-sample (8.7.0+1498186374-1.u14) stable; urgency=medium
+ .
+   * Release - 8.7.0+1498186374
+Checksums-Sha1: 
+ 44016102b39e2ac690f32b86d691d5633f34d103 1124 zmb1-abc-sample_8.7.0+1498186374-1.u14_amd64.deb
+Checksums-Sha256: 
+ 2f3d186b229baf6d8873746475af5ddffec7721846ffa3444137796ee32eeb2a 1124 zmb1-abc-sample_8.7.0+1498186374-1.u14_amd64.deb
+Files: 
+ 5e82ceebf5bbbb290769b3d834908bbd 1124 mail optional zmb1-abc-sample_8.7.0+1498186374-1.u14_amd64.deb
