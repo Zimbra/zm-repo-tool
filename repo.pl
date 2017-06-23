@@ -328,6 +328,13 @@ sub main()
             },
          },
          {
+            name         => "POP_BACK",
+            type         => "!",
+            hash_src     => \%cmd_hash,
+            validate_sub => undef,
+            default_sub  => sub { return undef; },
+         },
+         {
             name         => "INTERACTIVE",
             type         => "!",
             hash_src     => \%cmd_hash,
@@ -521,6 +528,7 @@ SignWith: $repo->{sign_key}
 Limit: $repo->{limit}
 EOM
         ;
+      close(FD);
 
       print "REPO INITIALIZED\n";
    }
@@ -537,15 +545,65 @@ EOM
    Die("PACKAGE '$changes_file' IS MISSING")
      if ( !-f $changes_file );
 
-   &debsign( $changes_file, $repo->{sign_key}, $repo->{key_pass} );
-   &updateReprepro( $CFG{REPO_NAME}, "includedeb", $repo->{distro}, $deb_file, $repo->{key_pass} );
-   &updateReprepro( $CFG{REPO_NAME}, "includedsc", $repo->{distro}, $dsc_file, $repo->{key_pass} )
-     if ( -f $dsc_file );
+   print "\n";
+   print "PACKAGE LISTINGS (BEFORE):\n";
+   print "--------------------------\n";
+   &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+   print "--------------------------\n";
+   print "\n";
 
-   unlink($deb_file);
-   unlink($dsc_file)     if ( -f $dsc_file );
-   unlink($changes_file) if ( -f $changes_file );
-   unlink( glob($tar_file_glob) );
+   if ( $CFG{POP_BACK} )
+   {
+      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", "zimbra", "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+      chomp( my @f = <FD> );
+      close(FD);
+
+      if (@f)
+      {
+         print "--------------------------\n";
+         print "PopBack: $f[0]\n";
+         print "--------------------------\n";
+         print "\n";
+      }
+
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "remove", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+   }
+   else
+   {
+      {
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", "zimbra", "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         chomp( my @f = <FD> );
+         close(FD);
+
+         if ( @f >= $repo->{limit} )
+         {
+            print "--------------------------\n";
+            for ( my $i = $repo->{limit} - 1; $i < @f; ++$i )
+            {
+               print "PopFront: $f[$i]\n";
+            }
+            print "--------------------------\n";
+            print "\n";
+         }
+      }
+
+      &debsign( $changes_file, $repo->{sign_key}, $repo->{key_pass} );
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "includedeb", $repo->{distro}, $deb_file );
+      &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "includedsc", $repo->{distro}, $dsc_file )
+        if ( -f $dsc_file );
+
+      unlink($deb_file);
+      unlink($dsc_file)     if ( -f $dsc_file );
+      unlink($changes_file) if ( -f $changes_file );
+      unlink( glob($tar_file_glob) );
+   }
+
+   print "\n";
+   print "PACKAGE LISTINGS (AFTER):\n";
+   print "--------------------------\n";
+   &repreproCmd( $CFG{REPO_NAME}, $repo->{key_pass}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+   print "--------------------------\n";
+   print "\n";
 }
 
 
@@ -580,18 +638,71 @@ sub handle_yum_repo
    Die("PACKAGE '$rpm_file' IS MISSING")
      if ( !-f $rpm_file );
 
-   &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass} );
-   &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
+   print "\n";
+   print "PACKAGE LISTINGS (BEFORE):\n";
+   print "--------------------------\n";
+   system( "repomanage", "--new", "--keep=0", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+   print "--------------------------\n";
+   print "\n";
 
-   move( $rpm_file,  "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
-   move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" )  or Die("Could not move $srpm_file")
-     if ( -f $srpm_file );
+   if ( $CFG{POP_BACK} )
+   {
+      open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=1", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+      chomp( my @f = <FD> );
+      close(FD);
 
-   chdir("$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}");
-   qx(createrepo --update .);
-   qx(rm -f \$(repomanage --old --keep=$repo->{limit} .));
-   qx(createrepo --update .);
-   chdir($CWD);
+      my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+      if (@g)
+      {
+         print "--------------------------\n";
+         foreach (@g)
+         {
+            print "PopBack: $_\n";
+            unlink($_);
+         }
+         print "--------------------------\n";
+         print "\n";
+      }
+   }
+   else
+   {
+      &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass} );
+      &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
+
+      move( $rpm_file,  "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
+      move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" )  or Die("Could not move $srpm_file")
+        if ( -f $srpm_file );
+
+      {
+         system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+
+         open( FD, "-|" ) or exec( "repomanage", "--old", "--keep=$repo->{limit}", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+         chomp( my @f = <FD> );
+         close(FD);
+
+         my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+         if (@g)
+         {
+            print "--------------------------\n";
+            foreach (@g)
+            {
+               print "PopFront: $_\n";
+               unlink($_);
+            }
+            print "--------------------------\n";
+            print "\n";
+         }
+
+         system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+      }
+   }
+
+   print "\n";
+   print "PACKAGE LISTINGS (AFTER):\n";
+   print "--------------------------\n";
+   system( "repomanage", "--new", "--keep=0", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+   print "--------------------------\n";
+   print "\n";
 }
 
 sub debsign
@@ -624,9 +735,9 @@ sub debsign
      if ( !$success );
 }
 
-sub updateReprepro
+sub repreproCmd
 {
-   my ( $destdir, $updtype, $distro, $package, $pass ) = @_;
+   my ( $destdir, $pass, $cmd, $distro, $package ) = @_;
 
    my $exp = Expect->spawn(
       "reprepro",    #"--ignore=unknownfield",
@@ -634,7 +745,7 @@ sub updateReprepro
       "$CFG{REPO_DIR}/apt/$destdir",
       "-C",
       "zimbra",
-      $updtype,
+      $cmd,
       $distro,
       $package
    ) or Die("Cannot spawm reprepro");
