@@ -1,22 +1,43 @@
 #!/usr/bin/perl
 use strict;
+
 use Getopt::Long;
+use Sys::Hostname;
 
-my $host = "repo.zimbra.com"
+my $host = "repo.zimbra.com";
+my $repo = "/var/repositories";
 
-print "Do you want to S3-synchronize the package repository of this machine to S3 $host [yes/no]? ";
-my $in = <STDIN>;
+print "\n";
+print "============================================================================\n";
+print "WARNING: You are synchronizing package repositories to S3\n";
+print "     repository : $repo\n";
+print "     this host  : @{[hostname]}\n";
+print "     S3 host    : ${host}\n";
+print "============================================================================\n";
+print "Type 'yes' to confirm: ";
+
+chomp( my $in = <STDIN> );
 
 if ( $in eq "yes" )
 {
-   print "Updating S3 with new repository data.\n";
+   chdir($repo);
 
-   chdir("/var/repositories");
-   qx(aws s3 sync apt s3://$host/apt --acl public-read --exclude "87/conf/*" --exclude "90/conf/*" --delete --cache-control="max-age=3600");
-   qx(aws s3 sync rpm s3://$host/rpm --acl public-read --delete --cache-control="max-age=3600");
+   my @rpm_excludes = ();
+   my @apt_excludes = map { ( "--exclude", $_ ) } map { s,^apt/,, =~ $_; s,[/]*$,/*, =~ $_; $_; } glob("apt/*/conf/");
+
+   my @rpm_sync = ( "aws", "s3", "sync", "rpm", "s3://$host/rpm", "--acl", "public-read", @rpm_excludes, "--delete", "--cache-control='max-age=3600'" );
+   my @apt_sync = ( "aws", "s3", "sync", "apt", "s3://$host/apt", "--acl", "public-read", @apt_excludes, "--delete", "--cache-control='max-age=3600'" );
+
+   print "Syncing to S3...\n";
+
+   system(@apt_sync);
+   system(@rpm_sync);
+
+   print "============================================================================\n";
 }
 else
 {
    print "Baling out.\n";
+   print "============================================================================\n";
    exit 1;
 }
