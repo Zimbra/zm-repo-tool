@@ -8,7 +8,7 @@ do
    (
       cd "$i"
 
-      sed -i -e '/Codename:/a\Update: localreadd\nLimit: 30' -e '/localreadd/d' -e '/Limit/d' conf/distributions
+      sed -i -e '/Codename:/a\Update: localreadd' -e '/localreadd/d' -e '/Limit:/d' conf/distributions
 
       cat > conf/updates <<EOM
 Name: localreadd
