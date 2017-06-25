@@ -32,9 +32,10 @@ BEGIN
    $CWD                        = getcwd();
 }
 
-sub LoadConfiguration($)
+sub LoadConfiguration($;$)
 {
-   my $args = shift;
+   my $args                    = shift;
+   my $cfg_file_indirect_param = shift;
 
    my $cfg_name     = $args->{name};
    my $cmd_hash     = $args->{hash_src};
@@ -72,16 +73,18 @@ sub LoadConfiguration($)
 
    if ( !defined $val )
    {
-      if ( $CFG{CFG_DIR} )
+      if ( $cfg_file_indirect_param && $cmd_hash )
       {
-         my $file = "$CFG{CFG_DIR}/config.pl";
-         my $hash = LoadProperties($file)
-           if ( -f $file );
-
-         if ( $hash && exists $hash->{$cfg_name} )
+         if ( my $cfg_file = $cmd_hash->{$cfg_file_indirect_param} )
          {
-            $val = $hash->{$cfg_name};
-            $src = "config"
+            my $hash = LoadProperties($cfg_file)
+              if ( -f $cfg_file );
+
+            if ( $hash && exists $hash->{$cfg_name} )
+            {
+               $val = $hash->{$cfg_name};
+               $src = "config (@{[basename($cfg_file)]})";
+            }
          }
       }
    }
@@ -268,7 +271,7 @@ sub ProcessArgs
    }
 
    print Line();
-   LoadConfiguration($_) foreach (@$cmd_args);
+   LoadConfiguration($_, "CONFIG") foreach (@$cmd_args);
    print Line();
 }
 
@@ -276,7 +279,7 @@ sub EvalFile($;$)
 {
    my $fname = shift;
 
-   my $file = "$GLOBAL_PATH_TO_SCRIPT_DIR/$fname";
+   my $file = ($fname =~ m/^\//) ? $fname : "$GLOBAL_PATH_TO_SCRIPT_DIR/$fname";
 
    Die( "Error in '$file'", "$@" )
      if ( !-f $file );
@@ -295,25 +298,35 @@ sub EvalFile($;$)
 use File::Path qw/make_path/;
 use Expect;
 
-sub LoadRepoCfg()
-{
-   my @agg_repos = ();
-
-   push( @agg_repos, @{ EvalFile("config.repo") } );
-
-   return \@agg_repos;
-}
-
-
 sub main()
 {
    my %cmd_hash;
 
-   my @repo_conf = @{ LoadRepoCfg() };
+   my @repo_conf;
 
    &ProcessArgs(
       \%cmd_hash,
       [
+         {
+            name         => "CONFIG",
+            type         => "=s",
+            hash_src     => \%cmd_hash,
+            validate_sub => sub {
+               my $v = shift;
+               if (-T $v)
+               {
+                  push( @repo_conf, @{ EvalFile($v) } )
+                     if( @repo_conf == 0 );
+
+                  return 1;
+               }
+
+               return 0;
+            },
+            default_sub => sub {
+               return "config.repo";
+            },
+         },
          {
             name         => "OPERATION",
             type         => "=s",
