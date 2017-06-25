@@ -24,7 +24,8 @@ my %CFG = ();
 
 BEGIN
 {
-   $ENV{ANSI_COLORS_DISABLED} = 1 if ( !-t STDOUT );
+   $ENV{HOME}                  = glob("~$ENV{LOGNAME}");
+   $ENV{ANSI_COLORS_DISABLED}  = 1 if ( !-t STDOUT );
    $GLOBAL_PATH_TO_SCRIPT_FILE = Cwd::abs_path(__FILE__);
    $GLOBAL_PATH_TO_SCRIPT_DIR  = dirname($GLOBAL_PATH_TO_SCRIPT_FILE);
    $GLOBAL_PATH_TO_TOP         = dirname($GLOBAL_PATH_TO_SCRIPT_DIR);
@@ -299,7 +300,6 @@ sub main()
 
    &ProcessArgs(
       \%cmd_hash,
-
       [
          {
             name         => "CREATE_DISTRO",
