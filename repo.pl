@@ -40,6 +40,21 @@ sub LoadConfiguration($)
    my $cmd_hash     = $args->{hash_src};
    my $default_sub  = $args->{default_sub};
    my $validate_sub = $args->{validate_sub};
+   my $enabled_sub  = $args->{enabled_sub};
+
+   my $cfg_name_desc = (
+      sub {
+         if ($cfg_name)
+         {
+            my $o = $cfg_name;
+
+            $o = lc($o);
+            $o =~ s/_/-/g;
+            $o =~ s/^/--/;
+            return "$o (or cfg: $cfg_name)";
+         }
+        }
+   )->();
 
    my $val;
    my $src;
@@ -71,6 +86,17 @@ sub LoadConfiguration($)
       }
    }
 
+   if ($enabled_sub)
+   {
+      if ( !&$enabled_sub($cfg_name_desc) )
+      {
+         Die("$cfg_name_desc can't be specfied in this context")
+           if ( defined $val );
+
+         return;
+      }
+   }
+
    my $valid = 1;
 
    if ( defined $val )
@@ -83,20 +109,7 @@ sub LoadConfiguration($)
    {
       if ($default_sub)
       {
-         $val = &$default_sub(
-            map {
-               if ($_)
-               {
-                  my $o = $_;
-
-                  $o = lc($o);
-                  $o =~ s/_/-/g;
-                  $o =~ s/^/--/;
-                  "$o (or cfg: $_)";
-               }
-              } $cfg_name,
-            $val
-         );
+         $val = &$default_sub( $cfg_name_desc, $val );
          $src = "default" . ( $valid ? "" : "($src was rejected)" );
       }
    }
@@ -302,12 +315,16 @@ sub main()
       \%cmd_hash,
       [
          {
-            name         => "CREATE_DISTRO",
-            type         => "!",
+            name         => "OPERATION",
+            type         => "=s",
             hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub {
-               return 0;
+            validate_sub => sub {
+               my $v = shift;
+               return scalar( grep { $v eq $_ } ( "add-pkg", "rm-pkg", "list" ) ) > 0;
+            },
+            default_sub => sub {
+               my $o = shift;
+               Die("$o not unspecfied");
             },
          },
          {
@@ -328,18 +345,46 @@ sub main()
             },
          },
          {
-            name         => "REMOVE_NEWEST",
+            name         => "CREATE_DISTRO",
             type         => "!",
             hash_src     => \%cmd_hash,
             validate_sub => undef,
-            default_sub  => sub { return undef; },
+            default_sub  => sub {
+               return 0;
+            },
          },
          {
-            name         => "REMOVE_OLDEST",
-            type         => "!",
+            name         => "PACKAGE_NAME",
+            type         => "=s",
             hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub { return undef; },
+            validate_sub => sub {
+               my $v = shift;
+               $CFG{_PACKAGE_NAME} = $v;
+               return 1;
+            },
+            default_sub => sub {
+               my $o = shift;
+               Die("$o not unspecfied");
+            },
+            enabled_sub => sub {
+               return $CFG{OPERATION} eq "rm-pkg";
+            },
+         },
+         {
+            name         => "VERSION",
+            type         => "=s",
+            hash_src     => \%cmd_hash,
+            validate_sub => sub {
+               my $v = shift;
+               return scalar( grep { $v eq $_ } ( "newest", "oldest" ) ) > 0;
+            },
+            default_sub => sub {
+               my $o = shift;
+               Die("$o not unspecfied");
+            },
+            enabled_sub => sub {
+               return $CFG{OPERATION} eq "rm-pkg";
+            },
          },
          {
             name         => "PACKAGE",
@@ -349,90 +394,62 @@ sub main()
                my $v = shift;
                my @f = glob($v);
 
-               return !( @f != 1 || ( $f[0] !~ m/[.]rpm$/ && $f[0] !~ m/[.]deb$/ ) );
+               if ( !( @f != 1 || ( $f[0] !~ m/[.]rpm$/ && $f[0] !~ m/[.]deb$/ ) ) )
+               {
+                  $CFG{_PACKAGE_DIR}   = dirname( $f[0] );
+                  $CFG{_PACKAGE_FNAME} = basename( $f[0] );
+
+                  s/[-_]\d\d*.*// foreach ( $CFG{_PACKAGE_NAME} = $CFG{_PACKAGE_FNAME} );
+
+                  $CFG{_PACKAGE_OS} = undef;
+                  $CFG{_PACKAGE_OS} = "UBUNTU16"
+                    if (
+                     $CFG{_PACKAGE_DIR} =~ m/\/u16\//
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u16_[a-z0-9]*[.]deb/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]16[.]04_[a-z0-9]*[.]deb/
+                    );
+                  $CFG{_PACKAGE_OS} = "UBUNTU14"
+                    if (
+                     $CFG{_PACKAGE_DIR} =~ m/\/u14\//
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u14_[a-z0-9]*[.]deb/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]14[.]04_[a-z0-9]*[.]deb/
+                    );
+                  $CFG{_PACKAGE_OS} = "UBUNTU12"
+                    if (
+                     $CFG{_PACKAGE_DIR} =~ m/\/u12\//
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u12_[a-z0-9]*[.]deb/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]12[.]04_[a-z0-9]*[.]deb/
+                    );
+                  $CFG{_PACKAGE_OS} = "RHEL7"
+                    if (
+                     $CFG{_PACKAGE_DIR} =~ m/\/c7\//
+                     || $CFG{_PACKAGE_DIR} =~ m/\/r7\//
+                     || $CFG{_PACKAGE_DIR} =~ m/\/el7\//
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
+                    );
+                  $CFG{_PACKAGE_OS} = "RHEL6"
+                    if (
+                     $CFG{_PACKAGE_DIR} =~ m/\/c6\//
+                     || $CFG{_PACKAGE_DIR} =~ m/\/r6\//
+                     || $CFG{_PACKAGE_DIR} =~ m/\/el6\//
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c6[.][a-z_0-9]*[.]rpm/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r6[.][a-z_0-9]*[.]rpm/
+                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el6[.][a-z_0-9]*[.]rpm/
+                    );
+
+                  return 1;
+               }
+
+               return 0;
             },
             default_sub => sub {
                my $o = shift;
                Die("$o not unspecfied (should expand to a single .deb or .rpm)");
             },
-         },
-         {
-            name         => "_PACKAGE_DIR",
-            type         => "",
-            hash_src     => undef,
-            validate_sub => undef,
-            default_sub  => sub {
-               my @f   = glob( $CFG{PACKAGE} );
-               my $dir = dirname( $f[0] );
-               return $dir;
-            },
-         },
-         {
-            name         => "_PACKAGE_FNAME",
-            type         => "",
-            hash_src     => undef,
-            validate_sub => undef,
-            default_sub  => sub {
-               my @f = glob( $CFG{PACKAGE} );
-               my $b = basename( $f[0] );
-               return $b;
-            },
-         },
-         {
-            name         => "_PACKAGE_NAME",
-            type         => "",
-            hash_src     => undef,
-            validate_sub => undef,
-            default_sub  => sub {
-               my $b = $CFG{_PACKAGE_FNAME};
-               $b =~ s/[-_]\d\d*.*//;
-               return $b;
-            },
-         },
-         {
-            name         => "_PACKAGE_OS",
-            type         => "",
-            hash_src     => undef,
-            validate_sub => undef,
-            default_sub  => sub {
-               return "UBUNTU16"
-                 if (
-                  $CFG{_PACKAGE_DIR} =~ m/\/u16\//
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u16_[a-z0-9]*[.]deb/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]16[.]04_[a-z0-9]*[.]deb/
-                 );
-               return "UBUNTU14"
-                 if (
-                  $CFG{_PACKAGE_DIR} =~ m/\/u14\//
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u14_[a-z0-9]*[.]deb/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]14[.]04_[a-z0-9]*[.]deb/
-                 );
-               return "UBUNTU12"
-                 if (
-                  $CFG{_PACKAGE_DIR} =~ m/\/u12\//
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u12_[a-z0-9]*[.]deb/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]12[.]04_[a-z0-9]*[.]deb/
-                 );
-               return "RHEL7"
-                 if (
-                  $CFG{_PACKAGE_DIR} =~ m/\/c7\//
-                  || $CFG{_PACKAGE_DIR} =~ m/\/r7\//
-                  || $CFG{_PACKAGE_DIR} =~ m/\/el7\//
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
-                 );
-               return "RHEL6"
-                 if (
-                  $CFG{_PACKAGE_DIR} =~ m/\/c6\//
-                  || $CFG{_PACKAGE_DIR} =~ m/\/r6\//
-                  || $CFG{_PACKAGE_DIR} =~ m/\/el6\//
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c6[.][a-z_0-9]*[.]rpm/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r6[.][a-z_0-9]*[.]rpm/
-                  || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el6[.][a-z_0-9]*[.]rpm/
-                 );
-
-               return undef;
+            enabled_sub => sub {
+               return $CFG{OPERATION} eq "add-pkg";
             },
          },
          {
@@ -444,11 +461,21 @@ sub main()
                return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
             },
             default_sub => sub {
-               return $CFG{_PACKAGE_OS}
-                 if ( $CFG{_PACKAGE_OS} );
-
                my $o = shift;
-               Die("$o not specfied (could not auto detect)");
+
+               if ( $CFG{OPERATION} eq "add-pkg" )
+               {
+                  return $CFG{_PACKAGE_OS}
+                    if ( $CFG{_PACKAGE_OS} );
+
+                  Die("$o not specfied (could not auto detect)");
+               }
+
+               Die("$o not specfied");
+            },
+
+            enabled_sub => sub {
+               return scalar( grep { $CFG{OPERATION} eq $_ } ( "add-pkg", "rm-pkg" ) );
             },
          },
          {
@@ -539,16 +566,6 @@ EOM
       print "REPO INITIALIZED\n";
    }
 
-   s/$//                       for ( my $deb_file      = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
-   s/[.]deb$/.changes/         for ( my $changes_file  = $deb_file );
-   s/_[a-z0-9]*[.]deb$/.dsc/   for ( my $dsc_file      = $deb_file );
-   s/_[a-z0-9]*[.]deb$/.tar.*/ for ( my $tar_file_glob = $deb_file );
-
-   Die("PACKAGE '$deb_file' IS MISSING")
-     if ( !-f $deb_file );
-   Die("PACKAGE '$changes_file' IS MISSING")
-     if ( !-f $changes_file );
-
    print "\n";
    print "PACKAGE LISTINGS (BEFORE):\n";
    print "--------------------------\n";
@@ -562,42 +579,55 @@ EOM
    print "--------------------------\n";
    print "\n";
 
-   if ( $CFG{REMOVE_NEWEST} )
+   if ( $CFG{OPERATION} eq "rm-pkg" )
    {
-      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
-      chomp( my @f = <FD> );
-      close(FD);
-
-      if (@f)
+      if ( $CFG{VERSION} eq "newest" )
       {
-         print "--------------------------\n";
-         print "Removing: $f[0]\n";
-         print "--------------------------\n";
-         print "\n";
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         chomp( my @f = <FD> );
+         close(FD);
 
-         my ( $junk1, $junk2, $v ) = split( / /, $f[0], 3 );
-         &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
+         if (@f)
+         {
+            print "--------------------------\n";
+            print "Removing: $f[0]\n";
+            print "--------------------------\n";
+            print "\n";
+
+            my ( $junk1, $junk2, $v ) = split( / /, $f[0], 3 );
+            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
+         }
+      }
+      elsif ( $CFG{VERSION} eq "oldest" )
+      {
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         chomp( my @f = <FD> );
+         close(FD);
+
+         if (@f)
+         {
+            print "--------------------------\n";
+            print "Removing: $f[-1]\n";
+            print "--------------------------\n";
+            print "\n";
+
+            my ( $junk1, $junk2, $v ) = split( / /, $f[-1], 3 );
+            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
+         }
       }
    }
-   elsif ( $CFG{REMOVE_OLDEST} )
+   elsif ( $CFG{OPERATION} eq "add-pkg" )
    {
-      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
-      chomp( my @f = <FD> );
-      close(FD);
+      s/$//                       for ( my $deb_file      = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
+      s/[.]deb$/.changes/         for ( my $changes_file  = $deb_file );
+      s/_[a-z0-9]*[.]deb$/.dsc/   for ( my $dsc_file      = $deb_file );
+      s/_[a-z0-9]*[.]deb$/.tar.*/ for ( my $tar_file_glob = $deb_file );
 
-      if (@f)
-      {
-         print "--------------------------\n";
-         print "Removing: $f[-1]\n";
-         print "--------------------------\n";
-         print "\n";
+      Die("PACKAGE '$deb_file' IS MISSING")
+        if ( !-f $deb_file );
+      Die("PACKAGE '$changes_file' IS MISSING")
+        if ( !-f $changes_file );
 
-         my ( $junk1, $junk2, $v ) = split( / /, $f[-1], 3 );
-         &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
-      }
-   }
-   else
-   {
       print "--------------------------\n";
       print "Signing: $changes_file\n";
       print "Adding: $deb_file\n";
@@ -653,12 +683,6 @@ sub handle_yum_repo
       print "REPO INITIALIZED\n";
    }
 
-   s/[.]src[.]rpm/.rpm/ for ( my $rpm_file  = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
-   s/[.]rpm/.src.rpm/   for ( my $srpm_file = $rpm_file );
-
-   Die("PACKAGE '$rpm_file' IS MISSING")
-     if ( !-f $rpm_file );
-
    print "\n";
    print "PACKAGE LISTINGS (BEFORE):\n";
    print "--------------------------\n";
@@ -673,44 +697,53 @@ sub handle_yum_repo
    print "--------------------------\n";
    print "\n";
 
-   if ( $CFG{REMOVE_NEWEST} )
+   if ( $CFG{OPERATION} eq "rm-pkg" )
    {
-      open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=1", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
-      chomp( my @f = <FD> );
-      close(FD);
-
-      my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
-      if (@g)
+      if ( $CFG{VERSION} eq "newest" )
       {
-         print "--------------------------\n";
-         print "Removing: $g[0]\n";
-         print "--------------------------\n";
-         print "\n";
+         open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=1", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+         chomp( my @f = <FD> );
+         close(FD);
 
-         unlink( $g[0] );
-         system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+         my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+         if (@g)
+         {
+            print "--------------------------\n";
+            print "Removing: $g[0]\n";
+            print "--------------------------\n";
+            print "\n";
+
+            unlink( $g[0] );
+            system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+         }
+      }
+      elsif ( $CFG{VERSION} eq "oldest" )
+      {
+         open( FD, "-|" ) or exec( "repomanage", "--old", "--keep=1", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+         chomp( my @f = <FD> );
+         close(FD);
+
+         my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+         if (@g)
+         {
+            print "--------------------------\n";
+            print "Removing: $g[0]\n";
+            print "--------------------------\n";
+            print "\n";
+
+            unlink( $g[0] );
+            system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+         }
       }
    }
-   elsif ( $CFG{REMOVE_OLDEST} )
+   elsif ( $CFG{OPERATION} eq "add-pkg" )
    {
-      open( FD, "-|" ) or exec( "repomanage", "--old", "--keep=1", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
-      chomp( my @f = <FD> );
-      close(FD);
+      s/[.]src[.]rpm/.rpm/ for ( my $rpm_file  = $CFG{_PACKAGE_DIR} . "/" . $CFG{_PACKAGE_FNAME} );
+      s/[.]rpm/.src.rpm/   for ( my $srpm_file = $rpm_file );
 
-      my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
-      if (@g)
-      {
-         print "--------------------------\n";
-         print "Removing: $g[0]\n";
-         print "--------------------------\n";
-         print "\n";
+      Die("PACKAGE '$rpm_file' IS MISSING")
+        if ( !-f $rpm_file );
 
-         unlink( $g[0] );
-         system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
-      }
-   }
-   else
-   {
       print "--------------------------\n";
       print "Signing: $rpm_file\n";
       print "Signing: $srpm_file\n" if ( -f $srpm_file );
