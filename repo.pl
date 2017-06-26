@@ -277,9 +277,7 @@ sub ProcessArgs
 
 sub EvalFile($;$)
 {
-   my $fname = shift;
-
-   my $file = ($fname =~ m/^\//) ? $fname : "$GLOBAL_PATH_TO_SCRIPT_DIR/$fname";
+   my $file = shift;
 
    Die( "Error in '$file'", "$@" )
      if ( !-f $file );
@@ -583,11 +581,14 @@ EOM
    print "PACKAGE LISTINGS (BEFORE):\n";
    print "--------------------------\n";
    {
-      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
-      chomp( my @f = <FD> );
-      close(FD);
+      if( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" )
+      {
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         chomp( my @f = <FD> );
+         close(FD);
 
-      print "$_\n" foreach (@f)
+         print "$_\n" foreach (@f)
+      }
    }
    print "--------------------------\n";
    print "\n";
@@ -643,15 +644,16 @@ EOM
 
       print "--------------------------\n";
       print "Signing: $changes_file\n";
-      print "Adding: $deb_file\n";
-      print "Adding: $dsc_file\n" if ( -f $dsc_file );
-      print "--------------------------\n";
-      print "\n";
-
       &debsign( $changes_file, $repo->{sign_key}, $repo->{key_pass} );
+
+      print "Adding: $deb_file\n";
       &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "includedeb", $repo->{distro}, $deb_file );
+
+      print "Adding: $dsc_file\n" if ( -f $dsc_file );
       &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "includedsc", $repo->{distro}, $dsc_file )
         if ( -f $dsc_file );
+      print "--------------------------\n";
+      print "\n";
 
       unlink($deb_file);
       unlink($dsc_file)     if ( -f $dsc_file );
@@ -759,20 +761,21 @@ sub handle_yum_repo
 
       print "--------------------------\n";
       print "Signing: $rpm_file\n";
-      print "Signing: $srpm_file\n" if ( -f $srpm_file );
-      print "Adding: $rpm_file\n";
-      print "Adding: $srpm_file\n" if ( -f $srpm_file );
-      print "--------------------------\n";
-      print "\n";
-
       &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass} );
+
+      print "Signing: $srpm_file\n" if ( -f $srpm_file );
       &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
 
+      print "Adding: $rpm_file\n";
       move( $rpm_file,  "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
+
+      print "Adding: $srpm_file\n" if ( -f $srpm_file );
       move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" )  or Die("Could not move $srpm_file")
         if ( -f $srpm_file );
 
       system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
+      print "--------------------------\n";
+      print "\n";
    }
 
    print "\n";
@@ -808,7 +811,9 @@ sub debsign
 
    my $success = 0;
 
-   $exp->log_stdout(0);
+   $exp->log_stdout(1);
+
+   sleep(1);
 
    $exp->expect(
       1800,
@@ -831,7 +836,9 @@ sub repreproCmd
 
    my $success = 1;
 
-   $exp->log_stdout(0);
+   $exp->log_stdout(1);
+
+   sleep(1);
 
    $exp->expect(
       1800,
@@ -861,7 +868,9 @@ sub rpmSign
      )
      or Die("Cannot spawn rpmsign");
 
-   $exp->log_stdout(0);
+   $exp->log_stdout(1);
+
+   sleep(1);
 
    $exp->expect(
       1800,
