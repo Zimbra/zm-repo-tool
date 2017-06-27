@@ -138,55 +138,107 @@ EOM
 
    rsync -av ./samples.in/ "$WORK_DIR/packages/"
 
-   assert "INIT:YUM:CHK1" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+   assert "INIT:YUM" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/" <<EOM
 EOM
 
+   assert "INIT:APT" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp ls zmb1-abc-sample <<EOM
+EOM
+
+
    ############################################################
-   ECHO_TEST "ADD-PKG:YUM"
+   ECHO_TEST "YUM"
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/r7/zmb1-abc-sample-8.7.8+*64.rpm" --no-interactive
 
-   assert "ADD-PKG:YUM:CHK1" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+   assert "YUM:ADD-FIRST" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
 EOM
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/r7/zmb1-abc-sample-8.7.1+*64.rpm" --no-interactive
 
-   assert "ADD-PKG:YUM:CHK1" repomanage --new -k0 "$WORK_DIR"/var/repositories/rpm/D1/rhel7 <<EOM
+   assert "YUM:ADD-OLDER" repomanage --new -k0 "$WORK_DIR"/var/repositories/rpm/D1/rhel7 <<EOM
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.1+1498186375-1.r7.x86_64.rpm
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
 EOM
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/r7/zmb1-abc-sample-8.7.5+*64.rpm" --no-interactive
 
-   assert "ADD-PKG:YUM:CHK1" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+   assert "YUM:ADD-NEWER" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.1+1498186375-1.r7.x86_64.rpm
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-1.r7.x86_64.rpm
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
 EOM
 
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/r7/zmb1-abc-sample-8.7.3+*64.rpm" --no-interactive
+
+   assert "YUM:ADD-MIDDLE" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.1+1498186375-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.3+1498186377-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
+EOM
+
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=rm-pkg --package-name "zmb1-abc-sample" --version "oldest" --os RHEL7 --no-interactive
+
+   assert "YUM:RM-OLDEST" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.3+1498186377-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
+EOM
+
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=rm-pkg --package-name "zmb1-abc-sample" --version "newest" --os RHEL7 --no-interactive
+
+   assert "YUM:RM-NEWEST" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.3+1498186377-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-1.r7.x86_64.rpm
+EOM
+
    ############################################################
-   ECHO_TEST "ADD-PKG:APT"
+   ECHO_TEST "APT"
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/u16/zmb1-abc-sample_8.7.8+*64.deb" --no-interactive
 
-   assert "ADD-PKG:APT:CHK1" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+   assert "APT:ADD-FIRST" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
 EOM
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/u16/zmb1-abc-sample_8.7.1+*64.deb" --no-interactive
 
-   assert "ADD-PKG:APT:CHK1" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+   assert "APT:ADD-OLDER" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.1+1498186375-1.u16
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
 EOM
 
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/u16/zmb1-abc-sample_8.7.5+*64.deb" --no-interactive
 
-   assert "ADD-PKG:APT:CHK1" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+   assert "APT:ADD-NEWER" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.1+1498186375-1.u16
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
+EOM
+
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/u16/zmb1-abc-sample_8.7.3+*64.deb" --no-interactive
+
+   assert "APT:ADD-MIDDLE" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.1+1498186375-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.3+1498186377-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
+EOM
+
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=rm-pkg --package-name "zmb1-abc-sample" --version "oldest" --os UBUNTU16 --no-interactive
+
+   assert "APT:RM-OLDEST" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.3+1498186377-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
+EOM
+
+   ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=rm-pkg --package-name "zmb1-abc-sample" --version "newest" --os UBUNTU16 --no-interactive
+
+   assert "APT:RM-NEWEST" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.3+1498186377-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
 EOM
 
    ############################################################
@@ -214,6 +266,8 @@ then
    echo "REQUIRES ROOT PERMISSIONS"
    exit 1
 fi
+
+cd "$(dirname "$0")"
 
 export WORK_DIR=work-tmp
 export RUN_USER=repotest
