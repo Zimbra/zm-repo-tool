@@ -245,34 +245,80 @@ sub System(@)
    return { msg => $error_message, out => $stdout_buf, err => $stderr_buf };
 }
 
-sub ProcessArgs
+sub ProcessGroupArgs
 {
    my $cmd_hash = shift;
-   my $cmd_args = shift;
+   my $grp_sel  = shift;
+   my $grp_args = shift;
 
+   s/_/-/g foreach ( my $grp_sel_opt = lc($grp_sel) );
+
+   my $r = ProcessArgs( $cmd_hash, $grp_args->{""}, "", $grp_sel_opt );
+
+   foreach my $sub_key ( keys %$grp_args )
    {
-      my @cmd_opts =
-        map { $_->{opt} =~ y/A-Z_/a-z-/; $_; }    # convert the opt named to lowercase to make command line options
-        map { { opt => $_->{name}, opt_s => $_->{type} } }    # create a new hash with keys opt, opt_s
-        grep { $_->{type} }                                   # get only names which have a valid type
-        @$cmd_args;
+      next if ( !$sub_key );
 
-      my $help_func = sub {
-         print "Usage: $0 <options>\n";
-         print "Supported options: \n";
-         print "   --" . "$_->{opt}$_->{opt_s}\n" foreach (@cmd_opts);
-         exit(0);
-      };
-
-      if ( !GetOptions( $cmd_hash, ( map { $_->{opt} . $_->{opt_s} } @cmd_opts ), help => $help_func ) )
+      if ( !%{$cmd_hash}{$grp_sel_opt} || $sub_key eq %{$cmd_hash}{$grp_sel_opt} )
       {
-         print Die("wrong commandline options, use --help");
+         $r += ProcessArgs( $cmd_hash, $grp_args->{$sub_key}, $sub_key, $grp_sel_opt );
       }
    }
 
-   print Line();
-   LoadConfiguration($_, "CONFIG") foreach (@$cmd_args);
-   print Line();
+   exit(0) if ( $r == 0 );
+}
+
+sub ProcessArgs
+{
+   my $cmd_hash  = shift;
+   my $cmd_args  = shift;
+   my $group     = shift;
+   my $group_sel = shift;
+
+   my @cmd_opts =
+     map { $_->{opt} =~ y/A-Z_/a-z-/; $_; }    # convert the opt named to lowercase to make command line options
+     map { { opt => $_->{name}, opt_s => $_->{type} } }    # create a new hash with keys opt, opt_s
+     grep { $_->{type} }                                   # get only names which have a valid type
+     @$cmd_args;
+
+   my $help_inv  = 0;
+   my $help_func = sub {
+      if ( $group && $group_sel )
+      {
+         print "Additional options when --$group_sel=$group: \n"
+      }
+      else
+      {
+         print "Usage: $0 <options>\n";
+         print "Supported options: \n";
+      }
+      print "   --" . "$_->{opt}$_->{opt_s}\n" foreach (@cmd_opts);
+      $help_inv = 1;
+   };
+
+   print Line() if ( !$group );
+   my $OP = Getopt::Long::Parser->new;
+
+   $OP->configure( ( ( $group ? () : ("pass_through") ), ("no_ignore_case") ) );
+
+   if ( !$OP->getoptions( $cmd_hash, ( map { $_->{opt} . $_->{opt_s} } @cmd_opts ), help => $help_func ) )
+   {
+      print Die("wrong commandline options, use --help");
+   }
+
+   if ($help_inv)
+   {
+      push( @ARGV, "--help" );
+
+      return 0;
+   }
+   else
+   {
+      LoadConfiguration( $_, "CONFIG" ) foreach (@$cmd_args);
+      print Line();
+
+      return 1;
+   }
 }
 
 sub EvalFile($;$)
@@ -302,201 +348,203 @@ sub main()
 
    my @repo_conf;
 
-   &ProcessArgs(
+   &ProcessGroupArgs(
       \%cmd_hash,
-      [
-         {
-            name         => "CONFIG",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               if (-T $v)
-               {
-                  push( @repo_conf, @{ EvalFile($v) } )
-                     if( @repo_conf == 0 );
+      "OPERATION",
+      {
+         "" => [
+            {
+               name         => "CONFIG",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  if ( -T $v )
+                  {
+                     push( @repo_conf, @{ EvalFile($v) } )
+                       if ( @repo_conf == 0 );
 
-                  return 1;
-               }
+                     return 1;
+                  }
 
-               return 0;
+                  return 0;
+               },
+               default_sub => sub {
+                  return "config.repo";
+               },
             },
-            default_sub => sub {
-               return "config.repo";
+            {
+               name         => "OPERATION",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  return scalar( grep { $v eq $_ } ( "add-pkg", "rm-pkg", "list" ) ) > 0;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied");
+               },
             },
-         },
-         {
-            name         => "OPERATION",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               return scalar( grep { $v eq $_ } ( "add-pkg", "rm-pkg", "list" ) ) > 0;
+            {
+               name         => "REPO_DIR",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => undef,
+               default_sub  => sub { return "/var/repositories"; },
             },
-            default_sub => sub {
-               my $o = shift;
-               Die("$o not unspecfied");
+            {
+               name         => "REPO_NAME",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => undef,
+               default_sub  => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied");
+               },
             },
-         },
-         {
-            name         => "REPO_DIR",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub { return "/var/repositories"; },
-         },
-         {
-            name         => "REPO_NAME",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub {
-               my $o = shift;
-               Die("$o not unspecfied");
+            {
+               name         => "CREATE_DISTRO",
+               type         => "!",
+               hash_src     => \%cmd_hash,
+               validate_sub => undef,
+               default_sub  => sub {
+                  return 0;
+               },
             },
-         },
-         {
-            name         => "CREATE_DISTRO",
-            type         => "!",
-            hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub {
-               return 0;
+            {
+               name         => "INTERACTIVE",
+               type         => "!",
+               hash_src     => \%cmd_hash,
+               validate_sub => undef,
+               default_sub  => sub { return 1; },
             },
-         },
-         {
-            name         => "PACKAGE_NAME",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               $CFG{_PACKAGE_NAME} = $v;
-               return 1;
-            },
-            default_sub => sub {
-               my $o = shift;
-               Die("$o not unspecfied");
-            },
-            enabled_sub => sub {
-               return $CFG{OPERATION} eq "rm-pkg";
-            },
-         },
-         {
-            name         => "VERSION",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               return scalar( grep { $v eq $_ } ( "newest", "oldest" ) ) > 0;
-            },
-            default_sub => sub {
-               my $o = shift;
-               Die("$o not unspecfied");
-            },
-            enabled_sub => sub {
-               return $CFG{OPERATION} eq "rm-pkg";
-            },
-         },
-         {
-            name         => "PACKAGE",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               my @f = glob($v);
+         ],
+         "add-pkg" => [
+            {
+               name         => "PACKAGE",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  my @f = glob($v);
 
-               if ( !( @f != 1 || ( $f[0] !~ m/[.]rpm$/ && $f[0] !~ m/[.]deb$/ ) ) )
-               {
-                  $CFG{_PACKAGE_DIR}   = dirname( $f[0] );
-                  $CFG{_PACKAGE_FNAME} = basename( $f[0] );
+                  if ( !( @f != 1 || ( $f[0] !~ m/[.]rpm$/ && $f[0] !~ m/[.]deb$/ ) ) )
+                  {
+                     $CFG{_PACKAGE_DIR}   = dirname( $f[0] );
+                     $CFG{_PACKAGE_FNAME} = basename( $f[0] );
 
-                  s/[-_]\d\d*.*// foreach ( $CFG{_PACKAGE_NAME} = $CFG{_PACKAGE_FNAME} );
+                     s/[-_]\d\d*.*// foreach ( $CFG{_PACKAGE_NAME} = $CFG{_PACKAGE_FNAME} );
 
-                  $CFG{_PACKAGE_OS} = undef;
-                  $CFG{_PACKAGE_OS} = "UBUNTU16"
-                    if (
-                     $CFG{_PACKAGE_DIR} =~ m/\/u16\//
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u16_[a-z0-9]*[.]deb/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]16[.]04_[a-z0-9]*[.]deb/
-                    );
-                  $CFG{_PACKAGE_OS} = "UBUNTU14"
-                    if (
-                     $CFG{_PACKAGE_DIR} =~ m/\/u14\//
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u14_[a-z0-9]*[.]deb/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]14[.]04_[a-z0-9]*[.]deb/
-                    );
-                  $CFG{_PACKAGE_OS} = "UBUNTU12"
-                    if (
-                     $CFG{_PACKAGE_DIR} =~ m/\/u12\//
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u12_[a-z0-9]*[.]deb/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]12[.]04_[a-z0-9]*[.]deb/
-                    );
-                  $CFG{_PACKAGE_OS} = "RHEL7"
-                    if (
-                     $CFG{_PACKAGE_DIR} =~ m/\/c7\//
-                     || $CFG{_PACKAGE_DIR} =~ m/\/r7\//
-                     || $CFG{_PACKAGE_DIR} =~ m/\/el7\//
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
-                    );
-                  $CFG{_PACKAGE_OS} = "RHEL6"
-                    if (
-                     $CFG{_PACKAGE_DIR} =~ m/\/c6\//
-                     || $CFG{_PACKAGE_DIR} =~ m/\/r6\//
-                     || $CFG{_PACKAGE_DIR} =~ m/\/el6\//
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c6[.][a-z_0-9]*[.]rpm/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r6[.][a-z_0-9]*[.]rpm/
-                     || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el6[.][a-z_0-9]*[.]rpm/
-                    );
+                     $CFG{_PACKAGE_OS} = undef;
+                     $CFG{_PACKAGE_OS} = "UBUNTU16"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u16\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u16_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]16[.]04_[a-z0-9]*[.]deb/
+                       );
+                     $CFG{_PACKAGE_OS} = "UBUNTU14"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u14\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u14_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]14[.]04_[a-z0-9]*[.]deb/
+                       );
+                     $CFG{_PACKAGE_OS} = "UBUNTU12"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u12\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u12_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]12[.]04_[a-z0-9]*[.]deb/
+                       );
+                     $CFG{_PACKAGE_OS} = "RHEL7"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/c7\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/r7\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/el7\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
+                       );
+                     $CFG{_PACKAGE_OS} = "RHEL6"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/c6\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/r6\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/el6\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c6[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r6[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el6[.][a-z_0-9]*[.]rpm/
+                       );
 
-                  return 1;
-               }
+                     return 1;
+                  }
 
-               return 0;
+                  return 0;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied (should expand to a single .deb or .rpm)");
+               },
             },
-            default_sub => sub {
-               my $o = shift;
-               Die("$o not unspecfied (should expand to a single .deb or .rpm)");
-            },
-            enabled_sub => sub {
-               return $CFG{OPERATION} eq "add-pkg";
-            },
-         },
-         {
-            name         => "OS",
-            type         => "=s",
-            hash_src     => \%cmd_hash,
-            validate_sub => sub {
-               my $v = shift;
-               return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
-            },
-            default_sub => sub {
-               my $o = shift;
+            {
+               name         => "OS",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
+               },
+               default_sub => sub {
+                  my $o = shift;
 
-               if ( $CFG{OPERATION} eq "add-pkg" )
-               {
                   return $CFG{_PACKAGE_OS}
                     if ( $CFG{_PACKAGE_OS} );
 
                   Die("$o not specfied (could not auto detect)");
-               }
-
-               Die("$o not specfied");
+               },
             },
-
-            enabled_sub => sub {
-               return scalar( grep { $CFG{OPERATION} eq $_ } ( "add-pkg", "rm-pkg" ) );
+         ],
+         "rm-pkg" => [
+            {
+               name         => "PACKAGE_NAME",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  $CFG{_PACKAGE_NAME} = $v;
+                  return 1;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied");
+               },
             },
-         },
-         {
-            name         => "INTERACTIVE",
-            type         => "!",
-            hash_src     => \%cmd_hash,
-            validate_sub => undef,
-            default_sub  => sub { return 1; },
-         },
-      ]
+            {
+               name         => "VERSION",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  return scalar( grep { $v eq $_ } ( "newest", "oldest" ) ) > 0;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied");
+               },
+            },
+            {
+               name         => "OS",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not specfied");
+               },
+            },
+         ],
+      },
    );
 
    if ( $CFG{INTERACTIVE} )
@@ -581,7 +629,7 @@ EOM
    print "PACKAGE LISTINGS (BEFORE):\n";
    print "--------------------------\n";
    {
-      if( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" )
+      if ( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" )
       {
          open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
          chomp( my @f = <FD> );
@@ -767,10 +815,10 @@ sub handle_yum_repo
       &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
 
       print "Adding: $rpm_file\n";
-      move( $rpm_file,  "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
+      move( $rpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
 
       print "Adding: $srpm_file\n" if ( -f $srpm_file );
-      move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" )  or Die("Could not move $srpm_file")
+      move( $srpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/SRPMS/" ) or Die("Could not move $srpm_file")
         if ( -f $srpm_file );
 
       system( "createrepo", "--update", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" ) and Die("createrepo failed");
