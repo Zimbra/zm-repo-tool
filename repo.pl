@@ -245,7 +245,7 @@ sub System(@)
    return { msg => $error_message, out => $stdout_buf, err => $stderr_buf };
 }
 
-sub ProcessGroupArgs
+sub ProcessArgs
 {
    my $cmd_hash = shift;
    my $grp_sel  = shift;
@@ -253,7 +253,7 @@ sub ProcessGroupArgs
 
    s/_/-/g foreach ( my $grp_sel_opt = lc($grp_sel) );
 
-   my $r = ProcessArgs( $cmd_hash, $grp_args->{""}, "", $grp_sel_opt );
+   my $r = ProcessSubArgs( $cmd_hash, $grp_args->{""}, "", $grp_sel_opt );
 
    foreach my $sub_key ( keys %$grp_args )
    {
@@ -261,14 +261,14 @@ sub ProcessGroupArgs
 
       if ( !%{$cmd_hash}{$grp_sel_opt} || $sub_key eq %{$cmd_hash}{$grp_sel_opt} )
       {
-         $r += ProcessArgs( $cmd_hash, $grp_args->{$sub_key}, $sub_key, $grp_sel_opt );
+         $r += ProcessSubArgs( $cmd_hash, $grp_args->{$sub_key}, $sub_key, $grp_sel_opt );
       }
    }
 
    exit(0) if ( $r == 0 );
 }
 
-sub ProcessArgs
+sub ProcessSubArgs
 {
    my $cmd_hash  = shift;
    my $cmd_args  = shift;
@@ -348,7 +348,7 @@ sub main()
 
    my @repo_conf;
 
-   &ProcessGroupArgs(
+   &ProcessArgs(
       \%cmd_hash,
       "OPERATION",
       {
@@ -379,7 +379,7 @@ sub main()
                hash_src     => \%cmd_hash,
                validate_sub => sub {
                   my $v = shift;
-                  return scalar( grep { $v eq $_ } ( "add-pkg", "rm-pkg", "list" ) ) > 0;
+                  return scalar( grep { $v eq $_ } ( "add-pkg", "rm-pkg", "ls-pkg" ) ) > 0;
                },
                default_sub => sub {
                   my $o = shift;
@@ -499,6 +499,35 @@ sub main()
                     if ( $CFG{_PACKAGE_OS} );
 
                   Die("$o not specfied (could not auto detect)");
+               },
+            },
+         ],
+         "ls-pkg" => [
+            {
+               name         => "PACKAGE_NAME",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  $CFG{_PACKAGE_NAME} = $v;
+                  return 1;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not unspecfied");
+               },
+            },
+            {
+               name         => "OS",
+               type         => "=s",
+               hash_src     => \%cmd_hash,
+               validate_sub => sub {
+                  my $v = shift;
+                  return grep { lc( $_->{os_name} ) eq lc($v) } @repo_conf;
+               },
+               default_sub => sub {
+                  my $o = shift;
+                  Die("$o not specfied");
                },
             },
          ],
@@ -625,23 +654,25 @@ EOM
       print "REPO INITIALIZED\n";
    }
 
-   print "\n";
-   print "PACKAGE LISTINGS (BEFORE):\n";
-   print "--------------------------\n";
+   if ( $CFG{OPERATION} eq "ls-pkg" )
    {
-      if ( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" )
+      print "--------------------------\n";
+      print "PACKAGE LISTINGS:\n";
+      print "--------------------------\n";
       {
-         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
-         chomp( my @f = <FD> );
-         close(FD);
+         if ( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" && -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/dists/$repo->{distro}" )
+         {
+            open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+            chomp( my @f = <FD> );
+            close(FD);
 
-         print "$_\n" foreach (@f)
+            print "$_\n" foreach (@f)
+         }
       }
+      print "--------------------------\n";
+      print "\n";
    }
-   print "--------------------------\n";
-   print "\n";
-
-   if ( $CFG{OPERATION} eq "rm-pkg" )
+   elsif ( $CFG{OPERATION} eq "rm-pkg" )
    {
       if ( $CFG{VERSION} eq "newest" )
       {
@@ -708,18 +739,6 @@ EOM
       unlink($changes_file) if ( -f $changes_file );
       unlink( glob($tar_file_glob) );
    }
-
-   print "PACKAGE LISTINGS (AFTER):\n";
-   print "--------------------------\n";
-   {
-      open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
-      chomp( my @f = <FD> );
-      close(FD);
-
-      print "$_\n" foreach (@f)
-   }
-   print "--------------------------\n";
-   print "\n";
 }
 
 
@@ -746,21 +765,26 @@ sub handle_yum_repo
       print "REPO INITIALIZED\n";
    }
 
-   print "\n";
-   print "PACKAGE LISTINGS (BEFORE):\n";
-   print "--------------------------\n";
+   if ( $CFG{OPERATION} eq "ls-pkg" )
    {
-      open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=0", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
-      chomp( my @f = <FD> );
-      close(FD);
+      print "--------------------------\n";
+      print "PACKAGE LISTINGS:\n";
+      print "--------------------------\n";
+      {
+         if ( -d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" )
+         {
+            open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=0", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
+            chomp( my @f = <FD> );
+            close(FD);
 
-      my @g = reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
-      print "$_\n" foreach @g;
+            my @g = reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+            print "$_\n" foreach @g;
+         }
+      }
+      print "--------------------------\n";
+      print "\n";
    }
-   print "--------------------------\n";
-   print "\n";
-
-   if ( $CFG{OPERATION} eq "rm-pkg" )
+   elsif ( $CFG{OPERATION} eq "rm-pkg" )
    {
       if ( $CFG{VERSION} eq "newest" )
       {
@@ -825,20 +849,6 @@ sub handle_yum_repo
       print "--------------------------\n";
       print "\n";
    }
-
-   print "\n";
-   print "PACKAGE LISTINGS (AFTER):\n";
-   print "--------------------------\n";
-   {
-      open( FD, "-|" ) or exec( "repomanage", "--new", "--keep=0", "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" );
-      chomp( my @f = <FD> );
-      close(FD);
-
-      my @g = reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
-      print "$_\n" foreach @g;
-   }
-   print "--------------------------\n";
-   print "\n";
 }
 
 sub debsign

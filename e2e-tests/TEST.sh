@@ -178,6 +178,13 @@ $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-
 $WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
 EOM
 
+   assert "YUM:LS" eval '../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=ls-pkg --package-name zmb1-abc-sample --os RHEL7 --no-interactive | sed -n -e "/PACKAGE LISTING/,/=======/ { /----/,/----/{p} }" | sed -e /---/d' <<EOM
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.1+1498186375-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.3+1498186377-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.5+1498186379-1.r7.x86_64.rpm
+$WORK_DIR/var/repositories/rpm/D1/rhel7/x86_64/zmb1-abc-sample-8.7.8+1498186382-1.r7.x86_64.rpm
+EOM
+
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=rm-pkg --package-name "zmb1-abc-sample" --version "oldest" --os RHEL7 --no-interactive
 
    assert "YUM:RM-OLDEST" repomanage --new -k0 "$WORK_DIR/var/repositories/rpm/D1/rhel7" <<EOM
@@ -220,6 +227,13 @@ EOM
    ../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=add-pkg --package "$WORK_DIR/packages/u16/zmb1-abc-sample_8.7.3+*64.deb" --no-interactive
 
    assert "APT:ADD-MIDDLE" reprepro -b "$WORK_DIR/var/repositories/apt/D1" -C mycomp list xenial zmb1-abc-sample <<EOM
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.1+1498186375-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.3+1498186377-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
+xenial|mycomp|amd64: zmb1-abc-sample 8.7.8+1498186382-1.u16
+EOM
+
+   assert "APT:LS" eval '../repo.pl --config "$WORK_DIR/config.repo" --repo-dir "$WORK_DIR/var/repositories" --repo-name D1 --create-distro --operation=ls-pkg --package-name zmb1-abc-sample --os UBUNTU16 --no-interactive | sed -n -e "/PACKAGE LISTING/,/=======/ { /----/,/----/{p} }" | sed -e /---/d' <<EOM
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.1+1498186375-1.u16
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.3+1498186377-1.u16
 xenial|mycomp|amd64: zmb1-abc-sample 8.7.5+1498186379-1.u16
