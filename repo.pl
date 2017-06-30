@@ -42,6 +42,7 @@ sub LoadConfiguration($;$)
    my $default_sub  = $args->{default_sub};
    my $validate_sub = $args->{validate_sub};
    my $enabled_sub  = $args->{enabled_sub};
+   my $save_sub     = $args->{save_sub} || sub { my $x = shift; return $x; };
 
    my $cfg_name_desc = (
       sub {
@@ -126,22 +127,22 @@ sub LoadConfiguration($;$)
       {
          foreach my $k ( keys %{$val} )
          {
-            $CFG{$cfg_name}{$k} = ${$val}{$k};
+            $CFG{$cfg_name}{$k} = &$save_sub( ${$val}{$k} );
 
-            printf( " %-25s: %-17s : %s\n", $cfg_name, $cmd_hash ? $src : "detected", "{" . $k . " => " . ${$val}{$k} . "}" );
+            printf( " %-25s: %-17s : %s\n", $cfg_name, $cmd_hash ? $src : "detected", "{" . $k . " => " . $CFG{$cfg_name}{$k} . "}" );
          }
       }
       elsif ( ref($val) eq "ARRAY" )
       {
-         $CFG{$cfg_name} = $val;
+         $CFG{$cfg_name} = &$save_sub($val);
 
          printf( " %-25s: %-17s : %s\n", $cfg_name, $cmd_hash ? $src : "detected", "[" . join( ", ", @{ $CFG{$cfg_name} } ) . "]" );
       }
       else
       {
-         $CFG{$cfg_name} = $val;
+         $CFG{$cfg_name} = &$save_sub($val);
 
-         printf( " %-25s: %-17s : %s\n", $cfg_name, $cmd_hash ? $src : "detected", $val );
+         printf( " %-25s: %-17s : %s\n", $cfg_name, $cmd_hash ? $src : "detected", $CFG{$cfg_name} );
       }
    }
 }
@@ -337,6 +338,16 @@ sub EvalFile($;$)
    return \@ENTRIES;
 }
 
+sub SanitizePath($)
+{
+   my $v = shift;
+
+   $v =~ s,/\+,/,g;
+   $v =~ s,/$,,g;
+
+   return $v;
+}
+
 ###########################################################################################################################
 
 use File::Path qw/make_path/;
@@ -392,6 +403,9 @@ sub main()
                hash_src     => \%cmd_hash,
                validate_sub => undef,
                default_sub  => sub { return "/var/repositories"; },
+               save_sub     => sub {
+                  return SanitizePath(shift);
+               },
             },
             {
                name         => "REPO_NAME",
@@ -401,6 +415,9 @@ sub main()
                default_sub  => sub {
                   my $o = shift;
                   Die("$o not unspecfied");
+               },
+               save_sub => sub {
+                  return SanitizePath(shift);
                },
             },
             {
@@ -656,9 +673,10 @@ EOM
 
    if ( $CFG{OPERATION} eq "ls-pkg" )
    {
-      print "--------------------------\n";
+      print "\n";
+      print "------------------------------------------------------------------------------------------\n";
       print "PACKAGE LISTINGS:\n";
-      print "--------------------------\n";
+      print "------------------------------------------------------------------------------------------\n";
       {
          if ( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" && -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/dists/$repo->{distro}" )
          {
@@ -666,10 +684,19 @@ EOM
             chomp( my @f = <FD> );
             close(FD);
 
-            print "$_\n" foreach (@f)
+            foreach (@f)
+            {
+               $_ =~ m/.*[|]([^:]*)\s*:\s*([^\s]*)\s*([^\s]*)/;
+
+               my $pkg_arch = $1;
+               my $pkg_name = $2;
+               my $pkg_ver  = $3;
+
+               print "| $CFG{REPO_NAME} | $repo->{distro} | $repo->{os_name} | $repo->{component} | $pkg_arch | $pkg_name | $pkg_ver |\n";
+            }
          }
       }
-      print "--------------------------\n";
+      print "------------------------------------------------------------------------------------------\n";
       print "\n";
    }
    elsif ( $CFG{OPERATION} eq "rm-pkg" )
@@ -767,9 +794,10 @@ sub handle_yum_repo
 
    if ( $CFG{OPERATION} eq "ls-pkg" )
    {
-      print "--------------------------\n";
+      print "\n";
+      print "------------------------------------------------------------------------------------------\n";
       print "PACKAGE LISTINGS:\n";
-      print "--------------------------\n";
+      print "------------------------------------------------------------------------------------------\n";
       {
          if ( -d "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}" )
          {
@@ -777,11 +805,21 @@ sub handle_yum_repo
             chomp( my @f = <FD> );
             close(FD);
 
-            my @g = reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
-            print "$_\n" foreach @g;
+            foreach ( reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f )
+            {
+               my @comp = split( /\//, $_ );
+
+               $comp[-1] =~ m/(.*)-([0-9][^-]*-[0-9].*)[.][A-Za-z_0-9]*[.]rpm/;
+
+               my $pkg_name = $1;
+               my $pkg_ver  = $2;
+               my $pkg_arch = $comp[-2];
+
+               print "| $CFG{REPO_NAME} | $repo->{distro} | $repo->{os_name} | $repo->{component} | $pkg_arch | $pkg_name | $pkg_ver |\n";
+            }
          }
       }
-      print "--------------------------\n";
+      print "------------------------------------------------------------------------------------------\n";
       print "\n";
    }
    elsif ( $CFG{OPERATION} eq "rm-pkg" )
