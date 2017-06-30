@@ -451,8 +451,6 @@ sub main()
                      $CFG{_PACKAGE_DIR}   = dirname( $f[0] );
                      $CFG{_PACKAGE_FNAME} = basename( $f[0] );
 
-                     s/[-_]\d\d*.*// foreach ( $CFG{_PACKAGE_NAME} = $CFG{_PACKAGE_FNAME} );
-
                      $CFG{_PACKAGE_OS} = undef;
                      $CFG{_PACKAGE_OS} = "UBUNTU16"
                        if (
@@ -524,12 +522,8 @@ sub main()
                name         => "PACKAGE_NAME",
                type         => "=s",
                hash_src     => \%cmd_hash,
-               validate_sub => sub {
-                  my $v = shift;
-                  $CFG{_PACKAGE_NAME} = $v;
-                  return 1;
-               },
-               default_sub => sub {
+               validate_sub => undef,
+               default_sub  => sub {
                   my $o = shift;
                   Die("$o not unspecfied");
                },
@@ -553,12 +547,8 @@ sub main()
                name         => "PACKAGE_NAME",
                type         => "=s",
                hash_src     => \%cmd_hash,
-               validate_sub => sub {
-                  my $v = shift;
-                  $CFG{_PACKAGE_NAME} = $v;
-                  return 1;
-               },
-               default_sub => sub {
+               validate_sub => undef,
+               default_sub  => sub {
                   my $o = shift;
                   Die("$o not unspecfied");
                },
@@ -680,7 +670,7 @@ EOM
       {
          if ( -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/db" && -d "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}/dists/$repo->{distro}" )
          {
-            open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+            open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{PACKAGE_NAME} );
             chomp( my @f = <FD> );
             close(FD);
 
@@ -703,7 +693,7 @@ EOM
    {
       if ( $CFG{VERSION} eq "newest" )
       {
-         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{PACKAGE_NAME} );
          chomp( my @f = <FD> );
          close(FD);
 
@@ -715,12 +705,12 @@ EOM
             print "\n";
 
             my ( $junk1, $junk2, $v ) = split( / /, $f[0], 3 );
-            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
+            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{PACKAGE_NAME}=$v" );
          }
       }
       elsif ( $CFG{VERSION} eq "oldest" )
       {
-         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{_PACKAGE_NAME} );
+         open( FD, "-|" ) or exec( "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "list", $repo->{distro}, $CFG{PACKAGE_NAME} );
          chomp( my @f = <FD> );
          close(FD);
 
@@ -732,7 +722,7 @@ EOM
             print "\n";
 
             my ( $junk1, $junk2, $v ) = split( / /, $f[-1], 3 );
-            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{_PACKAGE_NAME}=$v" );
+            &repreproCmd( $repo->{key_pass}, "reprepro", "-b", "$CFG{REPO_DIR}/apt/$CFG{REPO_NAME}", "-C", $repo->{component}, "remove", $repo->{distro}, "$CFG{PACKAGE_NAME}=$v" );
          }
       }
    }
@@ -805,7 +795,7 @@ sub handle_yum_repo
             chomp( my @f = <FD> );
             close(FD);
 
-            foreach ( reverse grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f )
+            foreach ( reverse grep { $_ =~ /\/$CFG{PACKAGE_NAME}-[0-9]/; } @f )
             {
                my @comp = split( /\//, $_ );
 
@@ -830,7 +820,7 @@ sub handle_yum_repo
          chomp( my @f = <FD> );
          close(FD);
 
-         my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+         my @g = grep { $_ =~ /\/$CFG{PACKAGE_NAME}-[0-9]/; } @f;
          if (@g)
          {
             print "--------------------------\n";
@@ -848,7 +838,7 @@ sub handle_yum_repo
          chomp( my @f = <FD> );
          close(FD);
 
-         my @g = grep { $_ =~ /\/$CFG{_PACKAGE_NAME}-[0-9]/; } @f;
+         my @g = grep { $_ =~ /\/$CFG{PACKAGE_NAME}-[0-9]/; } @f;
          if (@g)
          {
             print "--------------------------\n";
