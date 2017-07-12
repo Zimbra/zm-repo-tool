@@ -260,7 +260,7 @@ sub ProcessArgs
    {
       next if ( !$sub_key );
 
-      if ( !%{$cmd_hash}{$grp_sel_opt} || $sub_key eq %{$cmd_hash}{$grp_sel_opt} )
+      if ( !$cmd_hash->{$grp_sel_opt} || $sub_key eq $cmd_hash->{$grp_sel_opt} )
       {
          $r += ProcessSubArgs( $cmd_hash, $grp_args->{$sub_key}, $sub_key, $grp_sel_opt );
       }
