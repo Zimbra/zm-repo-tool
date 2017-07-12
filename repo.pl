@@ -590,7 +590,7 @@ sub main()
    }
 
    system("gpgconf --kill gpg-agent 2>/dev/null");
-   system("gpg-agent --daemon --pinentry-program /usr/bin/pinentry-tty 2>/dev/null");
+   system("gpg-agent --daemon --pinentry-program /usr/bin/pinentry-tty 2>/dev/null") if(-f "/usr/bin/pinentry-tty");
 
    foreach my $repo ( grep { $CFG{OS} eq $_->{os_name} } @repo_conf )
    {

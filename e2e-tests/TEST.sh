@@ -1,27 +1,49 @@
 #!/bin/bash
 
-init_test_env_as_root()
+init_test_env()
 {
    if ! id "$RUN_USER" 1>/dev/null 2>/dev/null
    then
-      ( set +e; useradd -m "$RUN_USER" -G $(id -un); exit 0; )
-      ( set +e; usermod "$RUN_USER" -aG sudo,wheel; exit 0; )
+      echo "REQUIRES user $RUN_USER for running test in isolation - create user using:"
+      echo "   #sudo userdel -r repotest #if required to cleaup"
+      echo "   sudo useradd -m $RUN_USER -G $(id -un)"
+      echo "   sudo rm -rf '$WORK_DIR'"
+      echo "   sudo -u repotest -- $0"
+      exit 1
+   fi
+
+   if [ "$(id "$RUN_USER")" != "$(id)" ]
+   then
+      echo "REQUIRES user $RUN_USER for running test in isolation - run as $RUN_USER using:"
+      echo "   sudo -u repotest -- $0"
+      exit 1
    fi
 
    rm -rf "$WORK_DIR"
    mkdir -p "$WORK_DIR"
-   chown -R "$RUN_USER" "$WORK_DIR"
 }
 
 launch_sandboxed_test()
 {
    eval "export HOME=~$(id -un)" # set HOME correctly when running under sudo
 
-   LOG=/tmp/repo-test-$(date +%s).log
+   LOG=/tmp/repo-test.log
    echo "See $LOG for details"
 
    exec 9>&1
    exec 1>$LOG 2>&1
+   trap "showlog" ERR
+
+   showlog()
+   {
+      if [ "$ENV_SHOWLOG" ]
+      then
+         ( set +x; set +e; echo --------ERROR LOG FOLLOWS--------; cat $LOG; echo ---------------------------------; ) 1>&9
+      else
+         echo "See $LOG for details" 1>&9
+      fi
+   }
+
    set -x
 
    CNT=1
@@ -51,7 +73,7 @@ launch_sandboxed_test()
          exit 1
       fi
 
-      if ( set +e; diff -w <("$@" | sort) <(cat - | sort); exit $?; )
+      if ( set +e; diff -w <(set +e; "$@" | sort; exit 0) <(cat - | sort); exit $?; )
       then
          echo " - PASS: $STR" >&9
          ((++S))
@@ -70,7 +92,7 @@ launch_sandboxed_test()
    {
       local key_name="$1"; shift;
       local key_pass="$1"; shift;
-      local key="$(gpg --list-keys "$key_name Tester" | grep sub | awk '{ print $2 }' | awk -F/ '{ print $2 }')"
+      local key="$(gpg --list-keys "$key_name Tester" 2>/dev/null | grep sub | awk '{ print $2 }' | awk -F/ '{ print $2 }')"
 
       if [ -z "$key" ]
       then
@@ -92,7 +114,7 @@ Passphrase: $key_pass
 %commit
 %echo done
 EOM
-         key="$(gpg --list-keys "$key_name Tester" | grep sub | awk '{ print $2 }' | awk -F/ '{ print $2 }')"
+         key="$(gpg --list-keys "$key_name Tester" 2>/dev/null | grep sub | awk '{ print $2 }' | awk -F/ '{ print $2 }')"
       fi
 
       eval "${key_name}_KEY='$key'"
@@ -257,6 +279,11 @@ EOM
 
    ############################################################
 
+   if [ "$F" != "0" ]
+   then
+      showlog
+   fi
+
    echo "########################################## END #####################################" >&9
    echo " - PASS : $S" >&9
    echo " - FAIL : $F" >&9
@@ -275,23 +302,13 @@ EOM
 
 set -e
 
-if [ $(whoami) != "root" ]
-then
-   echo "REQUIRES ROOT PERMISSIONS"
-   exit 1
-fi
-
 cd "$(dirname "$0")"
 
 export WORK_DIR=work-tmp
-export RUN_USER=repotest
+export RUN_USER=$([ "$TRAVIS" ] && echo travis || echo repotest)
 
-init_test_env_as_root
+init_test_env
 
-exec sudo -u "$RUN_USER" /bin/bash - <<EOM
-WORK_DIR="${WORK_DIR}"
-$(type launch_sandboxed_test | sed -e '1d');
 launch_sandboxed_test "$@"
-EOM
 
 ###############################################################

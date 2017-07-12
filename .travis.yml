@@ -1,0 +1,28 @@
+sudo: required
+
+language: perl
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install gnupg gnupg2 gnupg-agent createrepo yum-utils libexpect-perl devscripts #pinentry-tty 
+  - sudo apt-get install dpkg-dev debhelper dh-autoreconf dh-make build-essential shunit2 db-util libgpgme11-dev libbz2-dev liblzma-dev libarchive-dev zlib1g-dev libdb-dev realpath
+  - git clone https://github.com/profitbricks/reprepro
+  - cd reprepro
+  - cp tests/shunit2-helper-functions.sh tests/shunit2-helper-functions.sh.orig
+  - sed -i -e '/^REPREPRO/s@[(].*[)]@(CDPATH= cd "${0%/*}/.." \&\& pwd)@g' tests/shunit2-helper-functions.sh
+  - dpkg-buildpackage -d -b -uc -us
+  - cd ..
+  - sudo dpkg -i ./reprepro_*_amd64.deb
+  - sudo apt-get remove debhelper dh-autoreconf dh-make build-essential shunit2 db-util libgpgme11-dev libbz2-dev liblzma-dev libarchive-dev zlib1g-dev libdb-dev realpath
+  - sudo apt-get remove 'pinentry-*'
+  - sudo apt-get install rng-tools
+  - sudo sed -i -e '$a\HRNGDEVICE=/dev/urandom\n' -e '/^HRNGDEVICE=/d' /etc/default/rng-tools
+  - sudo /etc/init.d/rng-tools restart
+
+install: true
+
+script:
+  - cd e2e-tests && ENV_SHOWLOG=1 bash -c ./TEST.sh
+
+after_failure:
+  - cat /tmp/repo-test.log
