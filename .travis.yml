@@ -10,7 +10,7 @@ before_install:
   - cd reprepro
   - cp tests/shunit2-helper-functions.sh tests/shunit2-helper-functions.sh.orig
   - sed -i -e '/^REPREPRO/s@[(].*[)]@(CDPATH= cd "${0%/*}/.." \&\& pwd)@g' tests/shunit2-helper-functions.sh
-  - dpkg-buildpackage -d -b -uc -us
+  - DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -d -b -uc -us
   - cd ..
   - sudo dpkg -i ./reprepro_*_amd64.deb
   - sudo apt-get remove debhelper dh-autoreconf dh-make build-essential shunit2 db-util libgpgme11-dev libbz2-dev liblzma-dev libarchive-dev zlib1g-dev libdb-dev realpath
@@ -23,6 +23,3 @@ install: true
 
 script:
   - cd e2e-tests && ENV_SHOWLOG=1 bash -c ./TEST.sh
-
-after_failure:
-  - cat /tmp/repo-test.log
