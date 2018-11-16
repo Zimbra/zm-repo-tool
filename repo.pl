@@ -452,6 +452,12 @@ sub main()
                      $CFG{_PACKAGE_FNAME} = basename( $f[0] );
 
                      $CFG{_PACKAGE_OS} = undef;
+		     $CFG{_PACKAGE_OS} = "UBUNTU18"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u18\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u18_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]18[.]04_[a-z0-9]*[.]deb/
+                       );
                      $CFG{_PACKAGE_OS} = "UBUNTU16"
                        if (
                         $CFG{_PACKAGE_DIR} =~ m/\/u16\//

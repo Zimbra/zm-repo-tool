@@ -27,6 +27,15 @@
       key_pass  => "ABC_PASS",
    },
    {
+      os_name   => "UBUNTU18",
+      desc      => "Repository for UBUNTU18",
+      distro    => "bionic",
+      type      => "APT",
+      component => "zimbra",
+      sign_key  => "ABC",
+      key_pass  => "ABC_PASS",
+   },
+   {
       os_name   => "RHEL6",
       desc      => "Repository for RHEL6",
       distro    => "rhel6",
