@@ -452,6 +452,12 @@ sub main()
                      $CFG{_PACKAGE_FNAME} = basename( $f[0] );
 
                      $CFG{_PACKAGE_OS} = undef;
+                     $CFG{_PACKAGE_OS} = "UBUNTU20"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u20\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u20_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]20[.]04_[a-z0-9]*[.]deb/
+                       );
 		     $CFG{_PACKAGE_OS} = "UBUNTU18"
                        if (
                         $CFG{_PACKAGE_DIR} =~ m/\/u18\//
@@ -484,6 +490,15 @@ sub main()
                         || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c7[.][a-z_0-9]*[.]rpm/
                         || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r7[.][a-z_0-9]*[.]rpm/
                         || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el7[.][a-z_0-9]*[.]rpm/
+                       );
+                     $CFG{_PACKAGE_OS} = "RHEL8"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/c8\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/r8\//
+                        || $CFG{_PACKAGE_DIR} =~ m/\/el8\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]c8[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]r8[.][a-z_0-9]*[.]rpm/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]el8[.][a-z_0-9]*[.]rpm/
                        );
                      $CFG{_PACKAGE_OS} = "RHEL6"
                        if (
