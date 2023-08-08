@@ -36,6 +36,15 @@
       key_pass  => "ABC_PASS",
    },
    {
+      os_name   => "UBUNTU20",
+      desc      => "Repository for UBUNTU20",
+      distro    => "focal",
+      type      => "APT",
+      component => "zimbra",
+      sign_key  => "ABC",
+      key_pass  => "ABC_PASS",
+   },
+   {
       os_name   => "RHEL6",
       desc      => "Repository for RHEL6",
       distro    => "rhel6",
@@ -53,4 +62,14 @@
       sign_key  => "DEF",
       key_pass  => "DEP_PASS",
    },
+   {
+      os_name   => "RHEL8",
+      desc      => "Repository for RHEL8",
+      distro    => "rhel8",
+      type      => "YUM",
+      component => "zimbra",
+      sign_key  => "DEF",
+      key_pass  => "DEP_PASS",
+   },
 );
+
