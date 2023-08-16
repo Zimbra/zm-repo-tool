@@ -969,7 +969,7 @@ sub rpmSign
      Expect->spawn(
       "rpmsign",
       "--resign",
-      "--define=" . q(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --passphrase-fd 3 --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
+      "--define=" . q(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
       "--key-id=$key",
       $package
      )
@@ -981,7 +981,7 @@ sub rpmSign
 
    $exp->expect(
       1800,
-      [ qr/Enter pass phrase/, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ]
+      [ qr/Please enter the passphrase to unlock the OpenPGP secret key/, sub { my $fh = shift; print $fh $pass; print $fh "\n"; exp_continue; } ]
    );
 
    $exp->soft_close();
