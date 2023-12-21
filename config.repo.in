@@ -45,6 +45,15 @@
       key_pass  => "ABC_PASS",
    },
    {
+      os_name   => "UBUNTU22",
+      desc      => "Repository for UBUNTU22",
+      distro    => "jammy",
+      type      => "APT",
+      component => "zimbra",
+      sign_key  => "ABC",
+      key_pass  => "ABC_PASS",
+   },
+   {
       os_name   => "RHEL6",
       desc      => "Repository for RHEL6",
       distro    => "rhel6",
@@ -70,6 +79,15 @@
       component => "zimbra",
       sign_key  => "DEF",
       key_pass  => "DEP_PASS",
+   },
+   {
+      os_name   => "RHEL9",
+      desc      => "Repository for RHEL9",
+      distro    => "rhel9",
+      type      => "YUM",
+      component => "zimbra",
+      sign_key  => "DEF",
+      key_pass  => "DEF_PASS",
    },
 );
 
