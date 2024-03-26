@@ -897,10 +897,10 @@ sub handle_yum_repo
 
       print "--------------------------\n";
       print "Signing: $rpm_file\n";
-      &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass} );
+      &rpmSign( $rpm_file, $repo->{sign_key}, $repo->{key_pass}, $repo->{distro} );
 
       print "Signing: $srpm_file\n" if ( -f $srpm_file );
-      &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass} ) if ( -f $srpm_file );
+      &rpmSign( $srpm_file, $repo->{sign_key}, $repo->{key_pass}, $repo->{distro} ) if ( -f $srpm_file );
 
       print "Adding: $rpm_file\n";
       move( $rpm_file, "$CFG{REPO_DIR}/rpm/$CFG{REPO_NAME}/$repo->{distro}/x86_64/" ) or Die("Could not move $rpm_file");
@@ -979,12 +979,19 @@ sub rpmSign
    my $package = shift;
    my $key     = shift;
    my $pass    = shift;
+   my $os      = shift;
+   my $digest_algo;
+   if ($os eq "rhel9") {
+	   $digest_algo = "sha256";
+   } else {
+	   $digest_algo = "sha1";
+   }
 
    my $exp =
      Expect->spawn(
       "rpmsign",
       "--resign",
-      "--define=" . q(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
+      "--define=" . qq(%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=$digest_algo --batch --no-verbose --no-armor --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}),
       "--key-id=$key",
       $package
      )
