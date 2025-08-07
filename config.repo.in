@@ -54,6 +54,15 @@
       key_pass  => "ABC_PASS",
    },
    {
+      os_name   => "UBUNTU24",
+      desc      => "Repository for UBUNTU24",
+      distro    => "noble",
+      type      => "APT",
+      component => "zimbra",
+      sign_key  => "ABC",
+      key_pass  => "ABC_PASS",
+   },
+   {
       os_name   => "RHEL6",
       desc      => "Repository for RHEL6",
       distro    => "rhel6",

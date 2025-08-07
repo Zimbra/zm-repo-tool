@@ -452,6 +452,12 @@ sub main()
                      $CFG{_PACKAGE_FNAME} = basename( $f[0] );
 
                      $CFG{_PACKAGE_OS} = undef;
+		     $CFG{_PACKAGE_OS} = "UBUNTU24"
+                       if (
+                        $CFG{_PACKAGE_DIR} =~ m/\/u24\//
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]u24_[a-z0-9]*[.]deb/
+                        || $CFG{_PACKAGE_FNAME} =~ m/[-]\d[^-]*[.]24[.]04_[a-z0-9]*[.]deb/
+                       );
 		     $CFG{_PACKAGE_OS} = "UBUNTU22"
                        if (
                         $CFG{_PACKAGE_DIR} =~ m/\/u22\//
